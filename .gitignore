@@ -1,0 +1,17 @@
+# Data
+localdata/
+*.parquet
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
