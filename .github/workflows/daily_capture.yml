@@ -1,18 +1,9 @@
 name: Tempest Daily Capture
 
 on:
-  # No GitHub schedule: on purpose. GitHub's cron is queued, not guaranteed,
-  # and drifts 5-30 minutes under load - fatal for a strategy whose signals
-  # live a handful of bars. Scheduling is external (cron-job.org) hitting the
-  # workflow_dispatch API every 5 minutes during US market hours, the same
-  # model the Price repo uses. Nothing runs on the operator's machine.
   workflow_dispatch:
 
 concurrency:
-  # Shared with paper_poll.yml: a 5-minute poll and this capture
-  # both write and push the same localdata CSVs, so they must never
-  # run simultaneously. cancel-in-progress: false makes the later
-  # one queue rather than die.
   group: tempest-paper
   cancel-in-progress: false
 

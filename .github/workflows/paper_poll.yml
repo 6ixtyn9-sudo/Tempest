@@ -1,24 +1,9 @@
 name: Tempest Paper Poll
 
-# Scan-only companion to Tempest Daily Capture. Runs ONLY paper_trade.py
-# against the screen, at a 5-minute cadence, so first-pullback signals are
-# seen while they are still actionable. It does NOT re-run the daily
-# screen+backtest capture -- that stays in daily_capture.yml.
-#
-# No GitHub schedule: on purpose. GitHub's cron is queued, not guaranteed,
-# and drifts 5-30 minutes under load, which is fatal for a signal that lives
-# a handful of bars. Scheduling is external (cron-job.org) hitting the
-# workflow_dispatch API, the same model the Price repo uses. Nothing runs on
-# the operator's machine.
-
 on:
   workflow_dispatch:
 
 concurrency:
-  # Shared with daily_capture.yml so a poll and a capture never run at once:
-  # both write and push the same localdata CSVs. cancel-in-progress: false
-  # means a poll dispatched during a capture QUEUES behind it instead of
-  # dying -- no git push conflict, no lost poll.
   group: tempest-paper
   cancel-in-progress: false
 
