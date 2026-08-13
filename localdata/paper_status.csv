@@ -1,5 +1,4 @@
 timestamp_utc,stage,detail
-2026-08-13T13:39:31.038855+00:00,client_ok,paper trading client constructed
 2026-08-13T13:39:31.268080+00:00,equity_failed,"APIError: {""message"": ""unauthorized.""}
 "
 2026-08-13T13:39:32.012668+00:00,pass_done,"open=0 exits=0 entries=watching,watching"
@@ -241,3 +240,12 @@ timestamp_utc,stage,detail
 2026-08-13T17:20:28.884052+00:00,skip_watching,AIRO: no fresh first-pullback signal
 2026-08-13T17:20:28.884125+00:00,skip_watching,LNSR: no fresh first-pullback signal
 2026-08-13T17:20:28.884188+00:00,skip_watching,RRGB: no fresh first-pullback signal
+2026-08-13T17:25:39.676070+00:00,client_ok,paper trading client constructed
+2026-08-13T17:25:39.676354+00:00,skip_extreme,DFSC: relvol=1800.4 > 50.0
+2026-08-13T17:25:39.676447+00:00,skip_extreme,FGI: relvol=655.8 > 50.0
+2026-08-13T17:25:39.676530+00:00,skip_extreme,FRGT: relvol=126.4 > 50.0
+2026-08-13T17:25:39.911983+00:00,equity,100000.00
+2026-08-13T17:25:41.219395+00:00,pass_done,open=0 exits=0 entries=watching=3
+2026-08-13T17:25:41.219511+00:00,skip_watching,AIRO: no fresh first-pullback signal
+2026-08-13T17:25:41.219594+00:00,skip_watching,LNSR: no fresh first-pullback signal
+2026-08-13T17:25:41.219672+00:00,skip_watching,RRGB: no fresh first-pullback signal
