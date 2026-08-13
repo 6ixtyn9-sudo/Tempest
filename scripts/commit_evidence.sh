@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
-for evidence in localdata/screen_log.csv localdata/trade_journal.csv; do
+for evidence in localdata/screen_log.csv localdata/trade_journal.csv localdata/paper_status.csv; do
     [ -f "$evidence" ] && git add -f "$evidence"
 done
 

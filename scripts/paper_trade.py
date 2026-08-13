@@ -25,6 +25,27 @@ from tempest.sources.alpaca import AlpacaSource  # noqa: E402
 from tempest.trader import PaperTrader  # noqa: E402
 
 
+STATUS_PATH = None
+
+
+def _status(stage: str, detail: str = "") -> None:
+    """Append one line to localdata/paper_status.csv so the paper step's
+    outcome is visible in git. Actions logs need a sign-in, and the step is
+    wrapped in `|| echo` so a failure never turns the run red."""
+    import csv, os
+    from pathlib import Path as _P
+    from tempest.config import DATA_DIR as _D
+    override = STATUS_PATH or os.getenv("TEMPEST_STATUS_PATH")
+    path = _P(override) if override else _D / "paper_status.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new = not path.exists()
+    with path.open("a", newline="") as fh:
+        w = csv.writer(fh)
+        if new:
+            w.writerow(["timestamp_utc", "stage", "detail"])
+        w.writerow([datetime.now(timezone.utc).isoformat(), stage, detail])
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--dry-run", action="store_true")
@@ -55,8 +76,14 @@ def main() -> int:
     # Paper guard first: this raises unless TEMPEST_PAPER=1 and keys exist.
     try:
         broker_mod.get_trading_client()
+        _status("client_ok", "paper trading client constructed")
     except RuntimeError as e:
         print(f"ERROR: {e}")
+        _status("client_failed", str(e))
+        return 1
+    except Exception as e:  # noqa: BLE001
+        print(f"ERROR building paper client: {e}")
+        _status("client_failed", f"{type(e).__name__}: {e}")
         return 1
 
     # Candidates: explicit symbols, else the live five-pillar screen.
@@ -73,6 +100,7 @@ def main() -> int:
                   f"float={r['float_shares']:,.0f}")
 
     if not candidates:
+        _status("no_candidates", "screen returned zero qualifiers")
         print("No candidates today — nothing to do.")
         return 0
 
@@ -83,8 +111,10 @@ def main() -> int:
         try:
             equity = get_account_equity()
             print(f"Paper equity: ${equity:,.2f}")
+            _status("equity", f"{equity:.2f}")
         except Exception as e:  # noqa: BLE001
             print(f"Could not read equity (non-fatal): {e}")
+            _status("equity_failed", f"{type(e).__name__}: {e}")
 
     result = trader.run_once(candidates, dry_run=args.dry_run)
     print(f"\nOpen positions: {result['open_positions']}")
@@ -92,6 +122,9 @@ def main() -> int:
         print(f"  [EXIT] {e}")
     for e in result["entries"]:
         print(f"  [ENTRY] {e}")
+    _status("pass_done",
+            f"open={result['open_positions']} exits={len(result['exits'])} "
+            f"entries={','.join(str(e.get('action')) for e in result['entries']) or 'none'}")
     print(f"\nPass done {datetime.now(timezone.utc).isoformat()}")
     return 0
 
