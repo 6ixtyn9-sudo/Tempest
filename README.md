@@ -38,11 +38,16 @@ news vs no-news, horizon).
 ```
 python3 -m pip install -r requirements.txt
 PYTHONPATH=src python3 -m pytest -q
-# fetch 1m bars for a small universe (<=30 days via yfinance; the adapter
-# chunks requests into 7-day windows to respect Yahoo's server cap)
-PYTHONPATH=src python3 scripts/build_warehouse.py --symbols SOFI PLTR HOOD COIN --days 30
-# run the replication backtest over whatever is in the warehouse
+# 1. Screen the whole market for the five pillars (TradingView backend)
+PYTHONPATH=src python3 scripts/screen_market.py --fetch-bars
+# 2. Backtest the qualifying sessions (the rare movers, logged daily)
 PYTHONPATH=src python3 scripts/run_backtest.py
+```
+
+The five-pillar screen runs server-side on TradingView's scanner and returns
+the rare qualifying movers (gap >= 2%, relvol >= 5x, price $2-20, float < 20M,
+volume > 1M) in one request. Each day's screen is logged to
+localdata/screen_log.csv so evidence accumulates over time.
 ```
 
 ## Layout
@@ -57,12 +62,13 @@ src/tempest/
   backtest.py      # event simulation + per-bucket aggregation
   sources/
     base.py        # BarSource interface (yfinance now, Polygon later)
-    yfinance_1m.py # pilot adapter
-    finviz.py      # live screener stub (deferred until the backtest justifies it)
+    yfinance_1m.py # pilot adapter (7-day chunked)
+    tradingview.py # five-pillar live screener (scanner.tradingview.com)
+    finviz.py      # fallback scraper stub (deferred)
 scripts/
   build_warehouse.py
   run_backtest.py
-  screen_today.py  # stub
+  screen_market.py # run the pillars screen, log qualifiers, fetch bars
 ```
 
 ## Doctrine

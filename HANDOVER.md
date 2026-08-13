@@ -13,26 +13,30 @@ Why a new repo and not a Price feature
   and Tempest's screen. Separate repos, shared doctrine.
 
 Current state
-  Scaffold: data adapter (yfinance 1m pilot), warehouse, features,
-  strategy replication (5 pillars + first-pullback), validation,
-  backtest core, tests. Nothing live.
+  Scaffold: data adapters (yfinance 1m pilot + TradingView five-pillar
+  screener), warehouse, features, strategy replication (5 pillars +
+  first-pullback), validation, backtest core, market screen, tests.
+  Nothing live.
 
 Design decisions
   - The 5 pillars are HYPOTHESES with fixed thresholds from the course.
     The backtest measures follow-through after costs; the bucket analysis
     searches for structure the course never quantified.
-  - Data adapter first, scraper later: a live screener is only useful once
-    the measurement says the setup pays. screen_today.py is a stub.
-  - yfinance 1m (~30 days) for the pilot. Polygon (paid) adapter interface
-    exists for real 1-minute history when the pilot justifies the spend.
+  - Live screener FIRST (TradingView backend): a fixed symbol basket almost
+    never contains the rare qualifying days (proven empirically: 12 symbols
+    x 17 sessions = 0 passes). The screener finds the movers as they happen;
+    the pilot's 30-day window only matters once the bars of qualifying days
+    are captured.
+  - yfinance 1m (~30 days, 7-day chunked) for the pilot. Polygon (paid)
+    adapter interface exists for real 1-minute history when justified.
   - Costs are generous (microcap spreads/slippage are brutal); halts and
     borrow are documented as unmodelled risks in v1.
   - No look-ahead, fixed-prior thresholds, walk-forward validation — the
     Price/Halcyon discipline carried over.
 
 Deferred (do not build without evidence or operator sign-off)
-  - Live screening / finviz scraper
   - Polygon data (paid) until the pilot shows promise
+  - Finviz HTML scraper fallback (TradingView backend may change/throttle)
   - Any live trading, broker integration, real money
   - Options, forex, crypto lanes
 
