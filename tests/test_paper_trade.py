@@ -203,6 +203,24 @@ def test_trader_exits_at_horizon(tmp_path, monkeypatch):
     assert (j["action"] == "exit").any()
 
 
+def test_trader_same_pass_respects_max_open(tmp_path, monkeypatch):
+    """Four simultaneous signals must not all submit when max_open is 1."""
+    monkeypatch.setattr(risk, "JOURNAL_PATH", tmp_path / "journal.csv")
+    monkeypatch.setattr(risk, "COOLDOWN_PATH", tmp_path / "cooldown.json")
+    broker_ = FakeBroker()
+    frame = _ending_at_crossing()
+    source = FakeSource({"AAA": frame, "BBB": frame.copy(), "CCC": frame.copy()})
+    trader = PaperTrader(broker_, source, limits=RiskLimits(
+        max_open_positions=1, max_notional_per_position=1000.0,
+    ))
+    result = trader.run_once(["AAA", "BBB", "CCC"], dry_run=False)
+    entered = [e for e in result["entries"] if e["action"] == "entered"]
+    blocked = [e for e in result["entries"] if e["action"] == "blocked"]
+    assert len(entered) == 1
+    assert len(blocked) >= 2
+    assert len(broker_.orders) == 1
+
+
 def test_trader_dry_run_places_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(risk, "JOURNAL_PATH", tmp_path / "journal.csv")
     monkeypatch.setattr(risk, "COOLDOWN_PATH", tmp_path / "cooldown.json")

@@ -93,11 +93,23 @@ def main() -> int:
     else:
         filters = tradingview.build_filter()
         rows = tradingview.screen(filters)
-        candidates = sorted({r["symbol"] for r in rows})
-        print(f"Candidates (screen): {candidates}")
+        from tempest.strategy import REL_VOL_TRADE_MAX
+        tradeable, skipped = [], []
         for r in rows:
+            if r.get("relvol", 0) > REL_VOL_TRADE_MAX:
+                skipped.append(r)
+            else:
+                tradeable.append(r)
+        candidates = sorted({r["symbol"] for r in tradeable})
+        print(f"Candidates (screen): {candidates}")
+        for r in tradeable:
             print(f"  {r['symbol']} gap={r['gap_pct']:.1f}% relvol={r['relvol']:.1f} "
                   f"float={r['float_shares']:,.0f}")
+        for r in skipped:
+            print(f"  SKIP extreme {r['symbol']} relvol={r['relvol']:.1f}x "
+                  f"(>{REL_VOL_TRADE_MAX}x — halt/resume or reverse-split print)")
+            _status("skip_extreme",
+                    f"{r['symbol']}: relvol={r['relvol']:.1f} > {REL_VOL_TRADE_MAX}")
 
     if not candidates:
         _status("no_candidates", "screen returned zero qualifiers")

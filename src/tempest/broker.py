@@ -14,6 +14,27 @@ def get_account_equity(client=None) -> float:
     return float(client.get_account().equity)
 
 
+def get_open_order_symbols(client=None) -> set[str]:
+    """Symbols with a working (not filled/cancelled) order. A 5-minute
+    poll must not re-submit a DAY bracket that is already resting."""
+    client = client or get_trading_client()
+    try:
+        orders = client.get_orders()
+    except Exception:
+        return set()
+    out = set()
+    done = {"filled", "canceled", "cancelled", "expired", "rejected"}
+    for o in orders or []:
+        try:
+            status = str(getattr(o, "status", "") or "").lower()
+            if status in done:
+                continue
+            out.add(str(o.symbol).upper())
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return out
+
+
 def get_open_positions(client=None) -> pd.DataFrame:
     client = client or get_trading_client()
     try:

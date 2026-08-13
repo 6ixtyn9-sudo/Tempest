@@ -28,6 +28,7 @@ import pandas as pd
 
 # --- Pillar thresholds (fixed priors from the course) ---------------------
 REL_VOL_MIN = 5.0          # relative volume >= 5x
+REL_VOL_TRADE_MAX = 50.0   # above this the print is usually a halt/resume or reverse split
 TOTAL_VOL_MIN = 1_000_000  # total shares traded (session running total)
 GAP_MIN = 0.02             # open vs prior close >= +2%
 PRICE_MIN = 2.0
@@ -218,8 +219,7 @@ def _detect_session(grp, symbol, squeeze_bars, max_retrace, rr_target):
                     target_price=float(target_price),
                     squeeze_high=float(squeeze_high), pullback_low=float(pb_low),
                 ))
-                i = k + 1
-                break
+                return out  # the course: the FIRST pullback only
             k += 1
         else:
             i = j

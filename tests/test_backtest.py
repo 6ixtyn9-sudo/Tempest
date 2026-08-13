@@ -24,7 +24,9 @@ def _pad_to_sessions(df, n_sessions=3):
     out["session"] = out["bar_ts_utc"].dt.tz_convert("America/New_York").dt.date
     # relvol needs prior-session volume history: fabricate a light early
     # volume so relvol >= 5 on the next session.
-    out.loc[out.index < len(df), "volume"] = 50_000
+    # Thin the first session so later sessions clear 5x *as-of the entry
+    # bar* (using full-session volume here would be look-ahead).
+    out.loc[out.index < len(df), "volume"] = 10_000
     return out
 
 

@@ -63,6 +63,22 @@ def test_no_signal_when_no_squeeze():
     assert sigs == []
 
 
+def test_detect_first_pullback_only_emits_the_first():
+    """A session with two valid setups must emit only the first pullback."""
+    df = squeeze_pullback_break_frame()
+    # Append a second squeeze/pullback/break later in the same session.
+    extra = squeeze_pullback_break_frame()
+    extra["bar_ts_utc"] = extra["bar_ts_utc"] + pd.Timedelta(minutes=20)
+    extra["open"] += 1.0
+    extra["high"] += 1.0
+    extra["low"] += 1.0
+    extra["close"] += 1.0
+    both = pd.concat([df, extra], ignore_index=True)
+    feat = compute_features(both)
+    sigs = detect_first_pullback(feat, "YXT")
+    assert len(sigs) == 1
+
+
 def test_screen_pillars_relax_is_diagnostic_only():
     """relax=True loosens demand pillars and skips price/float, but the
     strict defaults remain."""

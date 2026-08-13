@@ -53,4 +53,12 @@ Known risks
   - The course's edge, if any, is a human-discretion edge (Level 2, tape).
     Tempest can only approximate it mechanically — the honest expectation
     is that measured follow-through will be far below the course's claims.
+
+2026-08-13 — integrity fixes
+  - Backtest screens pillars as-of the signal bar (relvol_asof + cumulative
+    volume). Using full-session volume to bless a morning entry was look-ahead.
+  - bucket_for edges were off-by-one (a 3% gap was labelled 5-10%).
+  - Detector emits the FIRST pullback per session only.
+  - Paper poll: same-pass max-open accounting, skip symbols with a resting
+    order, refuse screen names with relvol > 50x (halt/resume prints).
 """

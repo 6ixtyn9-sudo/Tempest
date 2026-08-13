@@ -56,8 +56,12 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
         prev_close = float(grp["close"].iloc[-1])
     df["gap_open"] = gap_vals
 
-    # Relative volume (session-level, as-of, no look-ahead): session's total
-    # volume / mean of PRIOR sessions' total volumes. NaN when no history.
+    # Relative volume. Two columns:
+    #   relvol_asof — cumulative session volume / prior-session ADV, at
+    #                 THIS bar. No look-ahead. This is what the screen
+    #                 and the backtest must use to decide a signal.
+    #   relvol      — full-session volume / prior ADV (EOD diagnostic).
+    #                 Using this to pass a morning signal is look-ahead.
     sess_totals = df.groupby("session")["volume"].sum()
     prior_mean = sess_totals.expanding().mean().shift(1)
     relvol_map = {}
@@ -65,6 +69,12 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
         pm = prior_mean.loc[sess]
         relvol_map[sess] = sess_totals.loc[sess] / pm if pd.notna(pm) and pm > 0 else np.nan
     df["relvol"] = df["session"].map(relvol_map)
+    cum = df.groupby("session")["volume"].cumsum()
+    asof = []
+    for idx, sess in zip(df.index, df["session"]):
+        pm = prior_mean.loc[sess] if sess in prior_mean.index else np.nan
+        asof.append(float(cum.loc[idx] / pm) if pd.notna(pm) and pm > 0 else np.nan)
+    df["relvol_asof"] = asof
 
     # Momentum helpers.
     df["cum_ret"] = df.groupby("session")["close"].transform(

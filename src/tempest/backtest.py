@@ -49,28 +49,38 @@ def run_backtest(
         if len(grp) < 2:
             continue
         screen_stats["sessions"] += 1
-        open_px = float(grp["open"].iloc[0])
+        # Gap is a session-level prior (open vs prior close). Relvol and
+        # volume must be as-of the SIGNAL bar — using the full session
+        # total here would let an afternoon volume spike bless a morning
+        # entry that had not yet printed 5x.
         gap = float(grp["gap_open"].iloc[0]) if "gap_open" in grp else np.nan
-        relvol = float(grp["relvol"].iloc[0]) if "relvol" in grp else np.nan
-        total_vol = float(grp["volume"].sum())
-        pillars = screen_pillars(
-            symbol, relvol=relvol, total_volume=total_vol,
-            gap_open=gap, price=open_px, float_shares=meta["float_shares"],
-            relax=relax,
-        )
-        if not pillars.passes:
-            for r in pillars.reasons:
-                key = r.split(":")[0].strip() if ":" in r else r.strip()
-                screen_stats["reject_reasons"][key] = screen_stats["reject_reasons"].get(key, 0) + 1
-            continue
-        screen_stats["passed"] += 1
-
+        open_px = float(grp["open"].iloc[0])
+        session_passed = False
         for sig in detect_first_pullback(grp, symbol):
+            row = grp.loc[grp["bar_ts_utc"] == sig.entry_ts]
+            if row.empty:
+                continue
+            asof_relvol = float(row["relvol_asof"].iloc[0]) if "relvol_asof" in row else np.nan
+            asof_vol = float(grp.loc[grp["bar_ts_utc"] <= sig.entry_ts, "volume"].sum())
+            pillars = screen_pillars(
+                symbol, relvol=asof_relvol, total_volume=asof_vol,
+                gap_open=gap, price=float(sig.entry_price),
+                float_shares=meta["float_shares"],
+                relax=relax,
+            )
+            if not pillars.passes:
+                for r in pillars.reasons:
+                    key = r.split(":")[0].strip() if ":" in r else r.strip()
+                    screen_stats["reject_reasons"][key] = screen_stats["reject_reasons"].get(key, 0) + 1
+                continue
+            session_passed = True
             entry_hour = _ny_hour(sig.entry_ts)
-            bucket = bucket_for(gap, relvol, sig.entry_price, entry_hour)
+            bucket = bucket_for(gap, asof_relvol, sig.entry_price, entry_hour)
             trades.append(
                 _simulate(sig, grp, cost_model, hold_bars, bucket)
             )
+        if session_passed:
+            screen_stats["passed"] += 1
 
     results = [t for t in trades if t is not None]
     summary = summarize(results)

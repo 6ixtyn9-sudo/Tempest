@@ -10,7 +10,7 @@ from tests.conftest import squeeze_pullback_break_frame
 def test_features_present_and_lookahead_free():
     df = squeeze_pullback_break_frame()
     feat = compute_features(df)
-    for col in ("vwap", "ema9", "gap_open", "relvol", "cum_ret", "ret_5"):
+    for col in ("vwap", "ema9", "gap_open", "relvol", "relvol_asof", "cum_ret", "ret_5"):
         assert col in feat.columns, col
     # No look-ahead: features at bar i depend only on bars <= i.
     # vwap at the first bar equals the first bar's typical price.

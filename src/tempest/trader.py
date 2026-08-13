@@ -233,12 +233,38 @@ class PaperTrader:
     def run_once(self, candidates: list[str], dry_run: bool = False) -> dict:
         self.client = None
         open_positions = self.broker.get_open_positions()
+        pending = set()
+        if hasattr(self.broker, "get_open_order_symbols"):
+            try:
+                pending = set(self.broker.get_open_order_symbols() or [])
+            except Exception:
+                pending = set()
         exits = self._manage_exits(open_positions, dry_run)
         entries = []
         for sym in candidates:
-            entries.append(self._try_entry(sym, open_positions, dry_run))
+            up = str(sym).upper()
+            if up in pending:
+                entries.append({"symbol": up, "action": "blocked",
+                                "reason": "working order already resting"})
+                continue
+            result = self._try_entry(sym, open_positions, dry_run)
+            entries.append(result)
+            if result.get("action") in ("entered", "would_enter"):
+                # Same-pass cap: count this fill toward max_open for the
+                # rest of this poll so four signals cannot all submit.
+                pending.add(up)
+                extra = pd.DataFrame([{
+                    "symbol": up, "qty": result.get("qty", 0),
+                    "avg_entry_price": result.get("price", 0),
+                    "current_price": result.get("price", 0),
+                    "market_value": 0.0,
+                }])
+                open_positions = (
+                    extra if open_positions is None or open_positions.empty
+                    else pd.concat([open_positions, extra], ignore_index=True)
+                )
         return {
-            "open_positions": len(open_positions),
+            "open_positions": len(open_positions) if open_positions is not None else 0,
             "exits": exits,
             "entries": entries,
         }

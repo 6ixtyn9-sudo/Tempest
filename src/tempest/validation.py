@@ -63,9 +63,10 @@ def bucket_for(gap_open: float, relvol: float, price: float, entry_hour_et: int)
             if v < e:
                 return lab
         return labels[-1]
+    # Edges are the UPPER bound of each label. A 3% gap is 2-5%, not 5-10%.
     return {
-        "gap_band": _band(gap_open, [0.02, 0.05, 0.10], ["2-5%", "5-10%", "10%+"]),
-        "relvol_band": _band(relvol, [5, 10, 20], ["5-10x", "10-20x", "20x+"]),
+        "gap_band": _band(gap_open, [0.05, 0.10], ["2-5%", "5-10%", "10%+"]),
+        "relvol_band": _band(relvol, [10, 20], ["5-10x", "10-20x", "20x+"]),
         "price_band": _band(price, [5, 10], ["2-5", "5-10", "10-20"]),
         "hour_et": entry_hour_et,
     }
