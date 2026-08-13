@@ -1,0 +1,120 @@
+name: Tempest Paper Poll
+
+# Scan-only companion to Tempest Daily Capture. Runs ONLY paper_trade.py
+# against the screen, at a 5-minute cadence, so first-pullback signals are
+# seen while they are still actionable. It does NOT re-run the daily
+# screen+backtest capture -- that stays in daily_capture.yml.
+#
+# No GitHub schedule: on purpose. GitHub's cron is queued, not guaranteed,
+# and drifts 5-30 minutes under load, which is fatal for a signal that lives
+# a handful of bars. Scheduling is external (cron-job.org) hitting the
+# workflow_dispatch API, the same model the Price repo uses. Nothing runs on
+# the operator's machine.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  # Shared with daily_capture.yml so a poll and a capture never run at once:
+  # both write and push the same localdata CSVs. cancel-in-progress: false
+  # means a poll dispatched during a capture QUEUES behind it instead of
+  # dying -- no git push conflict, no lost poll.
+  group: tempest-paper
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  poll:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check ET trading window
+        id: window
+        run: |
+          ET_HHMM=$(TZ=America/New_York date +%H%M)
+          ET_DOW=$(TZ=America/New_York date +%u)
+          echo "New York: $(TZ=America/New_York date '+%Y-%m-%d %H:%M %Z') dow=$ET_DOW"
+          if [ "$ET_DOW" -gt 5 ]; then
+            echo "Weekend in ET - skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$((10#$ET_HHMM))" -lt 930 ] || [ "$((10#$ET_HHMM))" -gt 1600 ]; then
+            echo "Outside 09:30-16:00 ET (now $ET_HHMM) - skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "In the RTH window."
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.window.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: steps.window.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        if: steps.window.outputs.run == 'true'
+        run: python3 -m pip install -r requirements.txt
+
+      - name: Restore localdata cache
+        if: steps.window.outputs.run == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: localdata
+          key: tempest-localdata-${{ github.run_id }}
+          restore-keys: |
+            tempest-localdata-
+
+      - name: Run paper trade (Alpaca PAPER only)
+        id: paper
+        if: steps.window.outputs.run == 'true'
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          TEMPEST_PAPER: "1"
+        run: |
+          if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
+            echo "Alpaca secrets not set - skipping paper trade."
+            echo "paper_exit=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          set +e
+          PYTHONPATH=src python3 scripts/paper_trade.py
+          code=$?
+          set -e
+          echo "paper_exit=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 0 ]; then
+            echo "::error::paper trade exited $code - see localdata/paper_status.csv"
+          fi
+          exit 0
+
+      - name: Commit paper-trade evidence
+        if: steps.window.outputs.run == 'true'
+        run: bash scripts/commit_evidence.sh "paper poll"
+
+      - name: Save localdata cache
+        if: steps.window.outputs.run == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: localdata
+          key: tempest-localdata-${{ github.run_id }}
+
+      - name: Fail run if paper trade failed
+        if: steps.window.outputs.run == 'true' && steps.paper.outputs.paper_exit != '' && steps.paper.outputs.paper_exit != '0'
+        run: |
+          echo "Paper trade exited ${{ steps.paper.outputs.paper_exit }}."
+          echo "Inspect localdata/paper_status.csv for the failing stage."
+          exit 1
