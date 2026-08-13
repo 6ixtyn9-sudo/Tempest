@@ -13,10 +13,11 @@ Why a new repo and not a Price feature
   and Tempest's screen. Separate repos, shared doctrine.
 
 Current state
-  Scaffold: data adapters (yfinance 1m pilot + TradingView five-pillar
+  Scaffold: data adapters (yfinance 1m, Alpaca 1m, TradingView five-pillar
   screener), warehouse, features, strategy replication (5 pillars +
-  first-pullback), validation, backtest core, market screen, tests.
-  Nothing live.
+  first-pullback), validation, backtest core, market screen, and a PAPER
+  trading layer (Alpaca paper only: bracket entries, stops, risk rails,
+  journal, P&L attribution). Tests pass (34).
 
 Design decisions
   - The 5 pillars are HYPOTHESES with fixed thresholds from the course.
@@ -35,8 +36,12 @@ Design decisions
     Price/Halcyon discipline carried over.
 
 Deferred (do not build without evidence or operator sign-off)
+  - Live (real-money) trading — paper must show a real edge first
   - Polygon data (paid) until the pilot shows promise
   - Finviz HTML scraper fallback (TradingView backend may change/throttle)
+  - Order-fill reconciliation against the broker (v2: journal stop/TP fills
+    via order queries; currently broker-closed positions are noted, not
+    filled-price-attributed)
   - Any live trading, broker integration, real money
   - Options, forex, crypto lanes
 

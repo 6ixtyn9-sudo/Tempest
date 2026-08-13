@@ -10,6 +10,7 @@ dependencies = [
   "yfinance==1.5.1",
   "python-dotenv==1.2.2",
   "requests==2.33.0",
+  "alpaca-py==0.43.5",
 ]
 
 [project.optional-dependencies]

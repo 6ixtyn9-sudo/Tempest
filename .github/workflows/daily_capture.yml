@@ -2,8 +2,9 @@ name: Tempest Daily Capture
 
 on:
   schedule:
-    - cron: "30 13 * * 1-5"   # 13:30 UTC = 09:30 ET, Mon-Fri (market open)
-    - cron: "30 19 * * 1-5"   # 19:30 UTC = 15:30 ET, Mon-Fri (near close)
+    - cron: "30 13 * * 1-5"   # 13:30 UTC = 09:30 ET (open) - screen + watch
+    - cron: "30 17 * * 1-5"   # 17:30 UTC = 13:30 ET (midday) - entries
+    - cron: "30 19 * * 1-5"   # 19:30 UTC = 15:30 ET (near close) - exits + log
   workflow_dispatch:
 
 permissions:
@@ -35,8 +36,17 @@ jobs:
           restore-keys: |
             tempest-localdata-
 
-      - name: Run daily capture
+      - name: Run daily capture (screen + backtest)
         run: bash scripts/capture_daily.sh
+
+      - name: Run paper trade (Alpaca PAPER only)
+        if: ${{ secrets.ALPACA_API_KEY != '' && secrets.ALPACA_SECRET_KEY != '' }}
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          TEMPEST_PAPER: "1"
+        run: |
+          PYTHONPATH=src python3 scripts/paper_trade.py || echo "paper trade failed (non-fatal for capture)"
 
       - name: Save localdata cache
         uses: actions/cache/save@v4

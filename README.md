@@ -50,6 +50,30 @@ volume > 1M) in one request. Each day's screen is logged to
 localdata/screen_log.csv so evidence accumulates over time.
 ```
 
+## Paper trading (Alpaca PAPER only)
+
+`scripts/paper_trade.py` turns Tempest into a live paper trader:
+- Screens the market (TradingView) for the five pillars
+- Watches each qualifier for a fresh first-pullback signal (entry bar =
+  the latest completed bar — no chasing)
+- Submits a DAY bracket on the Alpaca PAPER account: entry limit +
+  2R take-profit + stop at the pullback low
+- Manages exits (horizon / near-close) and journals every action
+
+Safeguards (non-negotiable):
+- `TEMPEST_PAPER=1` must be set or the trader REFUSES to run
+- The client is always constructed with `paper=True`
+- Risk rails: max open positions (3), max notional/position ($1,000),
+  per-symbol cooldown (1h), daily loss cap ($200), halt flag
+- Paper account only — never live keys, never live mode
+
+Run locally:
+```
+PYTHONPATH=src python3 scripts/paper_trade.py --dry-run   # what it would do
+PYTHONPATH=src python3 scripts/paper_trade.py              # place on paper
+PYTHONPATH=src python3 scripts/attribute_pnl.py            # realized P&L
+```
+
 ## Automated daily capture (GitHub Actions)
 
 The `.github/workflows/daily_capture.yml` workflow runs the capture loop

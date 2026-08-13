@@ -25,6 +25,11 @@ SYMBOL_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9\-]{0,5}$")
 
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 
+# Alpaca (PAPER ONLY). Keys from a paper account; trading code refuses to
+# run without TEMPEST_PAPER=1 set explicitly.
+ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")
+ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
+
 # Timeframe constants for the 1-minute pilot.
 PILOT_MAX_DAYS = 30          # yfinance 1m ceiling
 DEFAULT_DAYS = 30
