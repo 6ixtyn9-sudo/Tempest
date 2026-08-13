@@ -1,0 +1,5 @@
+timestamp_utc,stage,detail
+2026-08-13T13:39:31.038855+00:00,client_ok,paper trading client constructed
+2026-08-13T13:39:31.268080+00:00,equity_failed,"APIError: {""message"": ""unauthorized.""}
+"
+2026-08-13T13:39:32.012668+00:00,pass_done,"open=0 exits=0 entries=watching,watching"
