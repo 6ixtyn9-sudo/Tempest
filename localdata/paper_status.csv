@@ -80,3 +80,10 @@ timestamp_utc,stage,detail
 2026-08-13T15:45:25.406605+00:00,pass_done,open=0 exits=0 entries=watching=2
 2026-08-13T15:45:25.406713+00:00,skip_watching,AIRO: no fresh first-pullback signal
 2026-08-13T15:45:25.406798+00:00,skip_watching,LNSR: no fresh first-pullback signal
+2026-08-13T15:50:30.191749+00:00,client_ok,paper trading client constructed
+2026-08-13T15:50:30.298190+00:00,skip_extreme,FGI: relvol=475.1 > 50.0
+2026-08-13T15:50:30.298298+00:00,skip_extreme,DFSC: relvol=1491.9 > 50.0
+2026-08-13T15:50:30.536067+00:00,equity,100000.00
+2026-08-13T15:50:31.526429+00:00,pass_done,open=0 exits=0 entries=watching=2
+2026-08-13T15:50:31.526542+00:00,skip_watching,AIRO: no fresh first-pullback signal
+2026-08-13T15:50:31.526626+00:00,skip_watching,LNSR: no fresh first-pullback signal
