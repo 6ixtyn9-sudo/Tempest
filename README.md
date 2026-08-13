@@ -15,6 +15,17 @@ pullback):
 4. Price $2-20 (low price = room for large percentage moves)
 5. Float < 20M shares (the supply pillar; lower is better)
 
+**Reading the screen's numbers.** The scanner's `gap_pct` and `relvol` come
+from a delayed feed and are computed against the *prior close*, not a live
+print. Treat them as a ranking signal, not a quote. Observed 2026-08-13:
+DFSC at 969x relvol / 108% gap, FGI at 289x / 79% — both far beyond the
+>20x "mania" band above, which the course never intended as a tradable
+range. Extreme readings usually mean a thin float reacting to news, a
+halt-and-resume, or a reverse split, and the printed gap can be stale by
+minutes. Before trusting a fill on any such symbol, check the live quote
+and the halt status independently; the journal records what the broker
+returned, not whether the price was real.
+
 Entry: squeeze up -> shallow pullback (retrace < 50%, holds VWAP and the 9 EMA,
 green volume > red volume) -> first candle to make a new high. Stop = low of the
 pullback; target >= 2:1 reward:risk.
@@ -54,8 +65,11 @@ localdata/screen_log.csv so evidence accumulates over time.
 
 `scripts/paper_trade.py` turns Tempest into a live paper trader:
 - Screens the market (TradingView) for the five pillars
-- Watches each qualifier for a fresh first-pullback signal (entry bar =
-  the latest completed bar — no chasing)
+- Watches each qualifier for a recent first-pullback signal (entry bar within
+  `TEMPEST_SIGNAL_MAX_AGE_BARS`, default 5, of the latest completed bar)
+- Re-prices a stale signal at the current bar and skips it if price has
+  fallen below the stop (setup broken) or run more than
+  `TEMPEST_MAX_ENTRY_SLIPPAGE` (default 1%) past the signal (chasing)
 - Submits a DAY bracket on the Alpaca PAPER account: entry limit +
   2R take-profit + stop at the pullback low
 - Manages exits (horizon / near-close) and journals every action
@@ -76,12 +90,42 @@ PYTHONPATH=src python3 scripts/attribute_pnl.py            # realized P&L
 
 ## Automated daily capture (GitHub Actions)
 
-The `.github/workflows/daily_capture.yml` workflow runs the capture loop
-twice per trading day (09:30 ET open, 15:30 ET near-close) and on manual
-dispatch: screen the market -> log qualifiers -> fetch their 1m bars ->
-run the same-day backtest -> commit results. localdata/ is persisted via
-the Actions cache. Add this workflow when you push the repo (the scaffold
-includes it; just push and enable Actions).
+Two workflows, both `workflow_dispatch` only — there is no GitHub `schedule:`
+anywhere in this repo. GitHub's cron is queued rather than guaranteed and
+drifts 5-30 minutes under load, which is fatal for a signal that lives a
+handful of bars. Scheduling is external: cron-job.org posts to the
+`workflow_dispatch` API.
+
+- `daily_capture.yml` — screen -> log qualifiers -> fetch 1m bars -> same-day
+  backtest -> commit. Dispatched at the open and near the close.
+- `paper_poll.yml` — scan-only. Runs `paper_trade.py` and nothing else, every
+  5 minutes during RTH, so a first pullback is seen while it is still
+  actionable. A 5-minute poll with the default 5-bar window catches ~100% of
+  signals; at 3x/day it caught none.
+
+Both share `concurrency: group: tempest-paper` with `cancel-in-progress:
+false`, so a poll dispatched mid-capture queues instead of colliding on the
+git push. Each workflow re-checks the ET window itself and exits in seconds
+outside 09:30-16:00 ET, so a misconfigured scheduler cannot trade off-hours.
+
+### Reading localdata/paper_status.csv
+
+Every pass appends rows here, because Actions logs need a sign-in and a
+missing `trade_journal.csv` only means no order fired:
+
+| stage | meaning |
+|---|---|
+| `client_ok` | paper client constructed (does NOT prove credentials work) |
+| `equity,<amount>` | authenticated; the amount identifies the account |
+| `auth_failed` | credentials rejected — the run fails loudly |
+| `equity_failed` | broker/network error — the run fails loudly |
+| `no_candidates` | screen returned zero qualifiers (normal, exit 0) |
+| `pass_done ... entries=watching=N` | real pass, no signal (normal) |
+| `skip_watching,SYM: reason` | why each candidate was passed over |
+
+An Alpaca key ID is ~26 chars beginning `PK`; the secret is ~44 chars. Paper
+and live keys are not interchangeable and `get_trading_client` is hardcoded
+`paper=True`, so live keys always 401.
 
 ## Layout
 
@@ -98,10 +142,20 @@ src/tempest/
     yfinance_1m.py # pilot adapter (7-day chunked)
     tradingview.py # five-pillar live screener (scanner.tradingview.com)
     finviz.py      # fallback scraper stub (deferred)
+  risk.py          # risk rails, journal, halt flag
+  broker.py        # Alpaca paper client, equity, bracket orders
+  trader.py        # PaperTrader: refresh -> manage exits -> try entry
 scripts/
   build_warehouse.py
   run_backtest.py
-  screen_market.py # run the pillars screen, log qualifiers, fetch bars
+  screen_market.py    # run the pillars screen, log qualifiers, fetch bars
+  paper_trade.py      # one paper-trading pass
+  capture_daily.sh    # screen + backtest + commit evidence
+  commit_evidence.sh  # per-file `git add -f`, pull-rebase-push with retry
+  attribute_pnl.py    # realized P&L from the journal
+.github/workflows/
+  daily_capture.yml   # screen + backtest, dispatched twice daily
+  paper_poll.yml      # scan-only paper pass, dispatched every 5 min in RTH
 ```
 
 ## Doctrine
