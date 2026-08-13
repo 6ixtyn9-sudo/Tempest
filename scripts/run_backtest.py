@@ -55,9 +55,13 @@ def main() -> int:
                           relax=args.relax)
         reports.append(rep)
         s = rep["summary"]
+        ss = rep.get("screen_stats", {})
         print(f"\n== {sym}: {s.get('n', 0)} trades | gross {s.get('gross_mean', 0):.4f} "
               f"net {s.get('net_mean', 0):.4f} | win {s.get('win_rate', 0):.1%} | "
               f"avgR {s.get('avg_r', 0):.2f} | {s.get('exit_reasons', {})}")
+        if ss.get("sessions"):
+            print(f"   screen: {ss.get('passed', 0)}/{ss.get('sessions', 0)} sessions passed | "
+                  f"rejects: {ss.get('reject_reasons', {})}")
 
     all_trades = [t for r in reports for t in r["trades"]]
     agg = summarize([type("R", (), {"gross_return": t["gross_return"],

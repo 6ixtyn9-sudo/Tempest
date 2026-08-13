@@ -37,15 +37,18 @@ def run_backtest(
         return {
             "symbol": symbol, "n_signals": 0, "n_trades": 0,
             "summary": {"n": 0}, "bucket_summary": {}, "trades": [],
+            "screen_stats": {"sessions": 0, "passed": 0, "reject_reasons": {}},
         }
 
     meta = _symbol_meta(symbol)
     trades: list[TradeResult] = []
+    screen_stats = {"sessions": 0, "passed": 0, "reject_reasons": {}}
 
     for _, grp in df.groupby("session", sort=True):
         grp = grp.sort_values("bar_ts_utc").reset_index(drop=True)
         if len(grp) < 2:
             continue
+        screen_stats["sessions"] += 1
         open_px = float(grp["open"].iloc[0])
         gap = float(grp["gap_open"].iloc[0]) if "gap_open" in grp else np.nan
         relvol = float(grp["relvol"].iloc[0]) if "relvol" in grp else np.nan
@@ -56,7 +59,11 @@ def run_backtest(
             relax=relax,
         )
         if not pillars.passes:
+            for r in pillars.reasons:
+                key = r.split(":")[0].strip() if ":" in r else r.strip()
+                screen_stats["reject_reasons"][key] = screen_stats["reject_reasons"].get(key, 0) + 1
             continue
+        screen_stats["passed"] += 1
 
         for sig in detect_first_pullback(grp, symbol):
             entry_hour = _ny_hour(sig.entry_ts)
@@ -82,6 +89,7 @@ def run_backtest(
         "summary": summary,
         "bucket_summary": bucket_summary,
         "trades": [t.to_dict() for t in results],
+        "screen_stats": screen_stats,
     }
 
 
