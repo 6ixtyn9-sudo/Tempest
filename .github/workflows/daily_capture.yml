@@ -83,6 +83,10 @@ jobs:
           fi
           PYTHONPATH=src python3 scripts/paper_trade.py || echo "paper trade failed (non-fatal for capture)"
 
+      - name: Commit paper-trade journal
+        if: steps.window.outputs.run != 'false'
+        run: bash scripts/commit_evidence.sh "paper trade journal"
+
       - name: Save localdata cache
         if: steps.window.outputs.run != 'false'
         uses: actions/cache/save@v4
