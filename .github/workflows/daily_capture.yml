@@ -1,0 +1,45 @@
+name: Tempest Daily Capture
+
+on:
+  schedule:
+    - cron: "30 13 * * 1-5"   # 13:30 UTC = 09:30 ET, Mon-Fri (market open)
+    - cron: "30 19 * * 1-5"   # 19:30 UTC = 15:30 ET, Mon-Fri (near close)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python3 -m pip install -r requirements.txt
+
+      - name: Restore localdata cache
+        uses: actions/cache/restore@v4
+        with:
+          path: localdata
+          key: tempest-localdata-${{ github.run_id }}
+          restore-keys: |
+            tempest-localdata-
+
+      - name: Run daily capture
+        run: bash scripts/capture_daily.sh
+
+      - name: Save localdata cache
+        uses: actions/cache/save@v4
+        with:
+          path: localdata
+          key: tempest-localdata-${{ github.run_id }}

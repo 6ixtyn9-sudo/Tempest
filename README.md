@@ -50,6 +50,15 @@ volume > 1M) in one request. Each day's screen is logged to
 localdata/screen_log.csv so evidence accumulates over time.
 ```
 
+## Automated daily capture (GitHub Actions)
+
+The `.github/workflows/daily_capture.yml` workflow runs the capture loop
+twice per trading day (09:30 ET open, 15:30 ET near-close) and on manual
+dispatch: screen the market -> log qualifiers -> fetch their 1m bars ->
+run the same-day backtest -> commit results. localdata/ is persisted via
+the Actions cache. Add this workflow when you push the repo (the scaffold
+includes it; just push and enable Actions).
+
 ## Layout
 
 ```
