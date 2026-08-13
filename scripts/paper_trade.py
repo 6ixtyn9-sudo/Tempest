@@ -129,9 +129,15 @@ def main() -> int:
         print(f"  [EXIT] {e}")
     for e in result["entries"]:
         print(f"  [ENTRY] {e}")
+    from collections import Counter
+    tally = Counter(str(e.get("action")) for e in result["entries"])
     _status("pass_done",
             f"open={result['open_positions']} exits={len(result['exits'])} "
-            f"entries={','.join(str(e.get('action')) for e in result['entries']) or 'none'}")
+            f"entries={','.join(f'{k}={v}' for k, v in sorted(tally.items())) or 'none'}")
+    for e in result["entries"]:
+        if e.get("action") in ("watching", "blocked"):
+            _status(f"skip_{e.get('action')}",
+                    f"{e.get('symbol')}: {e.get('reason', '')}")
     print(f"\nPass done {datetime.now(timezone.utc).isoformat()}")
     return 0
 

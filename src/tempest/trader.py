@@ -48,9 +48,38 @@ class PaperTrader:
         start = end - timedelta(days=lookback_days)
         return self.source.fetch_1m(symbol, start, end)
 
+    def _max_signal_age_bars(self) -> int:
+        """How many bars old a first-pullback signal may be and still be
+        actionable. Polling cannot land on the exact signal bar often enough:
+        a session is 390 bars, so a 5-minute poll sees ~78 of them. Requiring
+        age==0 made entries near-impossible.
+
+        The window must be >= the poll interval or signals still slip between
+        polls: measured on real 1m data, a 5-minute poll with a 3-bar window
+        caught 33% of signals, with a 5-bar window 100%. Override with
+        TEMPEST_SIGNAL_MAX_AGE_BARS."""
+        import os
+        try:
+            return max(0, int(os.getenv("TEMPEST_SIGNAL_MAX_AGE_BARS", "5")))
+        except ValueError:
+            return 5
+
+    def _max_entry_slippage(self) -> float:
+        """Max fraction the price may run past the signal's entry before the
+        setup counts as chased. Override with TEMPEST_MAX_ENTRY_SLIPPAGE."""
+        import os
+        try:
+            return max(0.0, float(os.getenv("TEMPEST_MAX_ENTRY_SLIPPAGE", "0.01")))
+        except ValueError:
+            return 0.01
+
     def _fresh_signal(self, bars: pd.DataFrame, symbol: str):
-        """Return the first-pullback signal whose entry bar is the latest
-        completed bar, or None."""
+        """Return the most recent actionable first-pullback signal, or None.
+
+        Accepts a signal whose entry bar is within _max_signal_age_bars() of
+        the latest completed bar. The caller re-prices at the current bar, so
+        a stale signal is only taken if the setup is still intact.
+        """
         if bars is None or bars.empty:
             return None
         feat = compute_features(bars)
@@ -63,9 +92,19 @@ class PaperTrader:
         sigs = detect_first_pullback(today, symbol)
         if not sigs:
             return None
-        last_ts = today["bar_ts_utc"].iloc[-1]
-        fresh = [s for s in sigs if s.entry_ts == last_ts]
-        return fresh[-1] if fresh else None
+        ts = list(today["bar_ts_utc"])
+        index_of = {t: i for i, t in enumerate(ts)}
+        last_i = len(ts) - 1
+        max_age = self._max_signal_age_bars()
+        fresh = [s for s in sigs
+                 if last_i - index_of.get(s.entry_ts, -10_000) <= max_age
+                 and index_of.get(s.entry_ts, -10_000) >= 0]
+        if not fresh:
+            return None
+        sig = fresh[-1]
+        sig.age_bars = last_i - index_of[sig.entry_ts]
+        sig.last_price = float(today["close"].iloc[-1])
+        return sig
 
     def _entry_qty(self, price: float) -> int:
         qty = int(self.limits.max_notional_per_position // price)
@@ -77,44 +116,60 @@ class PaperTrader:
         if sig is None:
             return {"symbol": symbol, "action": "watching",
                     "reason": "no fresh first-pullback signal"}
-        qty = self._entry_qty(sig.entry_price)
+        age = getattr(sig, "age_bars", 0)
+        # Re-price a stale signal at the latest bar. The backtest fills on the
+        # breakout bar; a poll that arrives N bars later must not pretend it
+        # got that price. Enter at the current price or skip.
+        fill = float(getattr(sig, "last_price", sig.entry_price))
+        if age > 0:
+            if fill <= sig.stop_price:
+                return {"symbol": symbol, "action": "watching",
+                        "reason": f"signal {age}b old, price {fill:.4f} below stop "
+                                  f"{sig.stop_price:.4f} - setup broken"}
+            slip = (fill - sig.entry_price) / max(sig.entry_price, 1e-9)
+            if slip > self._max_entry_slippage():
+                return {"symbol": symbol, "action": "watching",
+                        "reason": f"signal {age}b old, price ran {slip:.2%} past "
+                                  f"entry - chasing"}
+        qty = self._entry_qty(fill)
         if qty < 1:
             return {"symbol": symbol, "action": "blocked",
                     "reason": "qty < 1 at max notional"}
         ok, reasons = check_entry_ok(
-            symbol, qty, sig.entry_price, self.limits, open_positions
+            symbol, qty, fill, self.limits, open_positions
         )
         if not ok:
             return {"symbol": symbol, "action": "blocked", "reason": "; ".join(reasons)}
-        risk = sig.entry_price - sig.stop_price
+        risk = fill - sig.stop_price
         if risk <= 0:
             return {"symbol": symbol, "action": "blocked", "reason": "non-positive risk"}
-        target = sig.entry_price + 2.0 * risk
+        target = fill + 2.0 * risk
         cid = f"tempest-{symbol.upper()}-{uuid.uuid4().hex[:8]}"
         row = {
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "symbol": symbol.upper(), "action": "entry", "side": "buy",
-            "qty": qty, "price": round(sig.entry_price, 4),
+            "qty": qty, "price": round(fill, 4),
             "order_id": cid, "status": "dry_run" if dry_run else "submitted",
             "setup": "first_pullback", "session": str(sig.session),
-            "entry_price": round(sig.entry_price, 4),
+            "signal_ts": str(sig.entry_ts), "signal_age_bars": age,
+            "entry_price": round(fill, 4),
             "stop_price": round(sig.stop_price, 4),
             "target_price": round(target, 4),
         }
         if dry_run:
             append_journal({**row, "reason": "dry_run"})
             return {"symbol": symbol.upper(), "action": "would_enter",
-                    "qty": qty, "price": round(sig.entry_price, 4),
+                    "qty": qty, "price": round(fill, 4), "age_bars": age,
                     "stop": round(sig.stop_price, 4), "target": round(target, 4)}
         try:
             self.client = self.client or self.broker.get_trading_client()
             self.broker.submit_bracket(
-                self.client, symbol, qty, "buy", sig.entry_price,
+                self.client, symbol, qty, "buy", fill,
                 sig.stop_price, target, cid,
             )
             append_journal(row)
             return {"symbol": symbol.upper(), "action": "entered",
-                    "qty": qty, "price": round(sig.entry_price, 4),
+                    "qty": qty, "price": round(fill, 4), "age_bars": age,
                     "stop": round(sig.stop_price, 4), "target": round(target, 4)}
         except Exception as e:  # noqa: BLE001 - journal the failure
             append_journal({**row, "status": "rejected", "reason": str(e)})

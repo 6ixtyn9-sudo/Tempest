@@ -8,10 +8,13 @@ on:
     # the open, screening a market with no regular-session bars.
     # Fix: schedule BOTH candidate UTC times per ET target; the ET gate below
     # skips the wrong-season twin so exactly one fires year-round.
+    # Paper trading now polls every 5 minutes from LOCAL cron (see
+    # scripts/cron_paper.sh). GitHub's scheduler is queued, not guaranteed,
+    # and routinely drifts 5-30 minutes under load - unusable for a strategy
+    # whose signals live for a handful of bars. These runs remain only for the
+    # daily screen/backtest evidence capture.
     - cron: "30 13 * * 1-5"   # 09:30 ET open        (EDT)
     - cron: "30 14 * * 1-5"   # 09:30 ET open        (EST)
-    - cron: "30 17 * * 1-5"   # 13:30 ET midday      (EDT)
-    - cron: "30 18 * * 1-5"   # 13:30 ET midday      (EST)
     - cron: "30 19 * * 1-5"   # 15:30 ET near-close  (EDT)
     - cron: "30 20 * * 1-5"   # 15:30 ET near-close  (EST)
   workflow_dispatch:
@@ -37,7 +40,7 @@ jobs:
             exit 0
           fi
           case "$ET_HHMM" in
-            09:3*|13:3*|15:3*) echo "In an intended ET window."; echo "run=true" >> "$GITHUB_OUTPUT" ;;
+            09:3*|15:3*) echo "In an intended ET window."; echo "run=true" >> "$GITHUB_OUTPUT" ;;
             *) echo "Off-window ($ET_HHMM ET) - the other season's cron. Skipping."; echo "run=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -72,7 +75,7 @@ jobs:
 
       - name: Run paper trade (Alpaca PAPER only)
         id: paper
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run != 'false' && vars.TEMPEST_CI_PAPER == '1'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
