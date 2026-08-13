@@ -71,6 +71,7 @@ jobs:
         run: bash scripts/capture_daily.sh
 
       - name: Run paper trade (Alpaca PAPER only)
+        id: paper
         if: steps.window.outputs.run != 'false'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
@@ -79,9 +80,18 @@ jobs:
         run: |
           if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
             echo "Alpaca secrets not set - skipping paper trade."
+            echo "paper_exit=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          PYTHONPATH=src python3 scripts/paper_trade.py || echo "paper trade failed (non-fatal for capture)"
+          set +e
+          PYTHONPATH=src python3 scripts/paper_trade.py
+          code=$?
+          set -e
+          echo "paper_exit=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 0 ]; then
+            echo "::error::paper trade exited $code - see localdata/paper_status.csv"
+          fi
+          exit 0
 
       - name: Commit paper-trade journal
         if: steps.window.outputs.run != 'false'
@@ -93,3 +103,10 @@ jobs:
         with:
           path: localdata
           key: tempest-localdata-${{ github.run_id }}
+
+      - name: Fail run if paper trade failed
+        if: steps.window.outputs.run != 'false' && steps.paper.outputs.paper_exit != '' && steps.paper.outputs.paper_exit != '0'
+        run: |
+          echo "Paper trade exited ${{ steps.paper.outputs.paper_exit }} - authentication or broker error."
+          echo "Inspect localdata/paper_status.csv for the stage that failed."
+          exit 1

@@ -113,8 +113,15 @@ def main() -> int:
             print(f"Paper equity: ${equity:,.2f}")
             _status("equity", f"{equity:.2f}")
         except Exception as e:  # noqa: BLE001
-            print(f"Could not read equity (non-fatal): {e}")
-            _status("equity_failed", f"{type(e).__name__}: {e}")
+            msg = f"{type(e).__name__}: {e}"
+            blob = str(e).lower()
+            auth = any(t in blob for t in ("unauthorized", "forbidden", "401", "403"))
+            _status("auth_failed" if auth else "equity_failed", msg)
+            print(f"FATAL: could not read paper equity: {msg}")
+            if auth:
+                print("Alpaca rejected the credentials. ALPACA_API_KEY must be the "
+                      "short PK... key ID and ALPACA_SECRET_KEY the long secret.")
+            return 1
 
     result = trader.run_once(candidates, dry_run=args.dry_run)
     print(f"\nOpen positions: {result['open_positions']}")
