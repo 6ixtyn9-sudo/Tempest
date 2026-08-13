@@ -91,7 +91,9 @@ def screen_pillars(
     if not relax:
         if not (PRICE_MIN <= price <= PRICE_MAX):
             reasons.append(f"price {price:.2f} outside [{PRICE_MIN},{PRICE_MAX}]")
-        if float_shares is not None and float_shares >= FLOAT_MAX:
+        if float_shares is None or not np.isfinite(float_shares):
+            reasons.append("float missing")
+        elif float_shares >= FLOAT_MAX:
             reasons.append(f"float {float_shares:,} >= {FLOAT_MAX:,}")
     return Pillars(
         symbol=symbol, relvol=relvol, total_volume=total_volume,

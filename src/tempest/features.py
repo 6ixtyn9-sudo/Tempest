@@ -15,6 +15,27 @@ import numpy as np
 import pandas as pd
 
 
+RTH_OPEN_MINUTE = 9 * 60 + 30
+RTH_CLOSE_MINUTE = 16 * 60
+
+
+def regular_session_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep 09:30 <= timestamp < 16:00 America/New_York bars only.
+
+    Alpaca can return extended-hours prints. Including them would make VWAP,
+    EMA, the session open and the overnight gap disagree with the RTH strategy.
+    """
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    out["bar_ts_utc"] = pd.to_datetime(out["bar_ts_utc"], utc=True, errors="coerce")
+    out = out.dropna(subset=["bar_ts_utc"])
+    ny = out["bar_ts_utc"].dt.tz_convert("America/New_York")
+    minute = ny.dt.hour * 60 + ny.dt.minute
+    mask = (minute >= RTH_OPEN_MINUTE) & (minute < RTH_CLOSE_MINUTE)
+    return out.loc[mask].sort_values("bar_ts_utc").reset_index(drop=True)
+
+
 def add_session_id(df: pd.DataFrame) -> pd.DataFrame:
     """Tag each bar with its NYSE session date (for intraday resets)."""
     out = df.copy()
@@ -26,7 +47,9 @@ def add_session_id(df: pd.DataFrame) -> pd.DataFrame:
 def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
-    df = df.sort_values("bar_ts_utc").reset_index(drop=True)
+    df = regular_session_only(df)
+    if df.empty:
+        return df
     df = add_session_id(df)
 
     # Per-session VWAP and EMA9 (reset each session, no look-ahead).

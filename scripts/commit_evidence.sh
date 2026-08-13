@@ -28,7 +28,15 @@ if lines:
 PY
 fi
 
-for evidence in localdata/screen_log.csv localdata/trade_journal.csv localdata/paper_status.csv; do
+evidence_files=(
+    localdata/screen_log.csv
+    localdata/trade_journal.csv
+    localdata/paper_status.csv
+)
+for report in localdata/backtest_report_*.json; do
+    [ -f "$report" ] && evidence_files+=("$report")
+done
+for evidence in "${evidence_files[@]}"; do
     [ -f "$evidence" ] && git add -f "$evidence"
 done
 

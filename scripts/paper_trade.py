@@ -52,6 +52,7 @@ def main() -> int:
     p.add_argument("--symbols", nargs="+", default=None,
                    help="Override the live screen with explicit symbols")
     p.add_argument("--max-notional", type=float, default=1000.0)
+    p.add_argument("--max-risk", type=float, default=50.0)
     p.add_argument("--max-open", type=int, default=3)
     p.add_argument("--max-daily-loss", type=float, default=200.0)
     p.add_argument("--cooldown-seconds", type=int, default=3600)
@@ -60,6 +61,7 @@ def main() -> int:
 
     limits = RiskLimits(
         max_notional_per_position=args.max_notional,
+        max_risk_per_position=args.max_risk,
         max_open_positions=args.max_open,
         max_daily_realized_loss=args.max_daily_loss,
         per_symbol_cooldown_seconds=args.cooldown_seconds,
@@ -135,7 +137,13 @@ def main() -> int:
                       "short PK... key ID and ALPACA_SECRET_KEY the long secret.")
             return 1
 
-    result = trader.run_once(candidates, dry_run=args.dry_run)
+    try:
+        result = trader.run_once(candidates, dry_run=args.dry_run)
+    except Exception as e:  # noqa: BLE001 - broker state must fail the pass closed
+        msg = f"{type(e).__name__}: {e}"
+        _status("state_failed", msg)
+        print(f"FATAL: paper pass stopped because broker/order state is unknown: {msg}")
+        return 1
     print(f"\nOpen positions: {result['open_positions']}")
     for e in result["exits"]:
         print(f"  [EXIT] {e}")
@@ -144,7 +152,8 @@ def main() -> int:
     from collections import Counter
     tally = Counter(str(e.get("action")) for e in result["entries"])
     _status("pass_done",
-            f"open={result['open_positions']} exits={len(result['exits'])} "
+            f"open={result['open_positions']} slots={result.get('exposure_slots', result['open_positions'])} "
+            f"exits={len(result['exits'])} "
             f"entries={','.join(f'{k}={v}' for k, v in sorted(tally.items())) or 'none'}")
     for e in result["entries"]:
         if e.get("action") in ("watching", "blocked"):

@@ -40,7 +40,7 @@ def attribute(journal) -> dict:
             if action == "entry" and rqty > 0:
                 cost = (cost * qty + px * rqty) / (qty + rqty) if (qty + rqty) else px
                 qty += rqty
-            elif action in ("exit", "stop_filled", "tp_filled") and rqty > 0:
+            elif action in ("exit", "stop_filled", "tp_filled", "broker_closed") and rqty > 0:
                 close_qty = min(rqty, qty)
                 pnl = (px - cost) * close_qty
                 realized += pnl

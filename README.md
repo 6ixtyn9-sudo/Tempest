@@ -40,8 +40,9 @@ news vs no-news, horizon).
 - Data adapter: yfinance 1-minute bars (pilot, ~30 days) behind a common
   interface; Polygon adapter slots in later for real history.
 - Video-rule replication: mechanical 5-pillar screen + first-pullback detector.
-- Honest backtest: costs (spread/slippage), as-of pillar screen (no
-  look-ahead), per-horizon follow-through, per-bucket breakdown.
+- Honest backtest: costs (spread/slippage), as-of pillar screen and dated
+  float evidence (no look-ahead), per-horizon follow-through, per-bucket
+  breakdown, and committed dated JSON reports.
 - Alpaca PAPER only (never live keys). No real money until paper shows an edge.
 
 ## Quickstart
@@ -69,15 +70,22 @@ localdata/screen_log.csv so evidence accumulates over time.
 - Re-prices a stale signal at the current bar and skips it if price has
   fallen below the stop (setup broken) or run more than
   `TEMPEST_MAX_ENTRY_SLIPPAGE` (default 1%) past the signal (chasing)
+- Requires a current-day RTH bar no more than `TEMPEST_MAX_BAR_AGE_MINUTES`
+  old (default 10); premarket, after-hours and prior-session bars cannot fire
+- Blocks new entries inside the final 30 minutes of regular trading
 - Submits a DAY bracket on the Alpaca PAPER account: entry limit +
   2R take-profit + stop at the pullback low
+- Journals order submission separately from confirmed entry/exit fills
 - Manages exits (horizon / near-close) and journals every action
 
 Safeguards (non-negotiable):
 - `TEMPEST_PAPER=1` must be set or the trader REFUSES to run
 - The client is always constructed with `paper=True`
 - Risk rails: max open positions (3), max notional/position ($1,000),
-  per-symbol cooldown (1h), daily loss cap ($200), halt flag
+  max stop-risk/position ($50), per-symbol cooldown (1h), daily loss cap
+  ($200), halt flag
+- Position/order/close API failures stop the pass; unknown broker state never
+  becomes an empty portfolio or an invented fill
 - Paper account only — never live keys, never live mode
 
 Run locally:
@@ -118,6 +126,7 @@ missing `trade_journal.csv` only means no order fired:
 | `equity,<amount>` | authenticated; the amount identifies the account |
 | `auth_failed` | credentials rejected — the run fails loudly |
 | `equity_failed` | broker/network error — the run fails loudly |
+| `state_failed` | positions/orders/lifecycle unknown — pass stops with no new order |
 | `no_candidates` | screen returned zero qualifiers (normal, exit 0) |
 | `pass_done ... entries=watching=N` | real pass, no signal (normal) |
 | `skip_watching,SYM: reason` | why each candidate was passed over |

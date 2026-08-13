@@ -7,7 +7,6 @@ real-money or runaway path (halt flag, paper-env guard lives in broker.py).
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pandas as pd
 
@@ -19,8 +18,8 @@ JOURNAL_PATH = DATA_DIR / "trade_journal.csv"
 
 _JOURNAL_COLUMNS = [
     "timestamp_utc", "symbol", "action", "side", "qty", "price", "order_id",
-    "status", "setup", "session", "entry_price", "stop_price", "target_price",
-    "exit_price", "pnl", "reason",
+    "status", "setup", "session", "signal_ts", "signal_age_bars",
+    "entry_price", "stop_price", "target_price", "exit_price", "pnl", "reason",
 ]
 
 
@@ -28,6 +27,7 @@ _JOURNAL_COLUMNS = [
 class RiskLimits:
     max_open_positions: int = 3
     max_notional_per_position: float = 1000.0
+    max_risk_per_position: float = 50.0
     max_daily_realized_loss: float = 200.0
     per_symbol_cooldown_seconds: int = 3600
     horizon_bars: int = 15
@@ -60,7 +60,7 @@ def append_journal(row: dict) -> None:
 
 
 def open_journal_entries(journal: pd.DataFrame | None = None) -> dict:
-    """Last unmatched entry per symbol (no later exit/stop/tp)."""
+    """Last confirmed filled entry per symbol with no later exit."""
     df = load_journal() if journal is None else journal
     if df is None or df.empty or "action" not in df.columns:
         return {}
@@ -71,19 +71,69 @@ def open_journal_entries(journal: pd.DataFrame | None = None) -> dict:
         if not sym:
             continue
         action = str(row.get("action", ""))
-        status = str(row.get("status", "") or "")
-        if action == "entry" and status not in ("rejected", "dry_run"):
+        status = str(row.get("status", "") or "").lower()
+        if action == "entry" and status in ("filled", "partially_filled"):
             open_rows[sym] = row
         elif action in ("exit", "stop_filled", "tp_filled", "broker_closed"):
             open_rows.pop(sym, None)
     return open_rows
 
 
+def pending_journal_orders(journal: pd.DataFrame | None = None) -> dict:
+    """Last unresolved submitted parent order per symbol."""
+    df = load_journal() if journal is None else journal
+    if df is None or df.empty or "action" not in df.columns:
+        return {}
+    pending: dict = {}
+    ordered = df.sort_values("timestamp_utc") if "timestamp_utc" in df.columns else df
+    terminal = {
+        "entry", "entry_cancelled", "entry_expired", "entry_rejected",
+    }
+    for _, row in ordered.iterrows():
+        sym = str(row.get("symbol", "")).upper()
+        if not sym:
+            continue
+        action = str(row.get("action", ""))
+        status = str(row.get("status", "")).lower()
+        if (
+            action == "order_submitted" and status not in ("dry_run", "rejected")
+        ) or (action == "entry" and status == "submitted"):
+            pending[sym] = row
+        elif action in terminal:
+            pending.pop(sym, None)
+    return pending
+
+
+def pending_exit_orders(journal: pd.DataFrame | None = None) -> dict:
+    """Last unresolved broker close request per symbol."""
+    df = load_journal() if journal is None else journal
+    if df is None or df.empty or "action" not in df.columns:
+        return {}
+    pending: dict = {}
+    ordered = df.sort_values("timestamp_utc") if "timestamp_utc" in df.columns else df
+    terminal = {
+        "exit", "stop_filled", "tp_filled", "broker_closed",
+        "exit_cancelled", "exit_expired", "exit_rejected",
+    }
+    for _, row in ordered.iterrows():
+        sym = str(row.get("symbol", "")).upper()
+        if not sym:
+            continue
+        action = str(row.get("action", ""))
+        if action == "exit_submitted":
+            pending[sym] = row
+        elif action in terminal:
+            pending.pop(sym, None)
+    return pending
+
+
 def today_realized_pnl() -> float:
     df = load_journal()
     if df.empty or "action" not in df.columns:
         return 0.0
-    exits = df[df["action"].isin(["exit", "stop_filled", "tp_filled"])]
+    exits = df[df["action"].isin([
+        "exit", "stop_filled", "tp_filled", "broker_closed",
+    ])]
     today = datetime.now(timezone.utc).date().isoformat()
     mask = exits["timestamp_utc"].astype(str).str.startswith(today)
     return float(pd.to_numeric(exits[mask]["pnl"], errors="coerce").fillna(0).sum())

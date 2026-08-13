@@ -1,7 +1,5 @@
 """Tests for the event-driven backtest simulation."""
 
-import numpy as np
-
 from tempest.backtest import run_backtest
 from tempest.validation import CostModel
 from tests.conftest import squeeze_pullback_break_frame
@@ -32,7 +30,9 @@ def _pad_to_sessions(df, n_sessions=3):
 
 def test_run_backtest_produces_trades_and_buckets(tmp_path):
     df = _pad_to_sessions(squeeze_pullback_break_frame())
-    rep = run_backtest(df, "YXT", cost_model=CostModel())
+    rep = run_backtest(
+        df, "YXT", cost_model=CostModel(), float_map={"YXT": 2_000_000}
+    )
     assert rep["symbol"] == "YXT"
     assert "summary" in rep and "bucket_summary" in rep
     # With a proper gap+relvol setup on later sessions we expect >= 1 signal.
@@ -45,8 +45,21 @@ def test_backtest_applies_float_pillar_from_screen_log(tmp_path):
     # Same frame: with a 50M float the session must not produce trades.
     rep = run_backtest(df, "YXT", float_map={"YXT": 50_000_000})
     assert rep["n_trades"] == 0
-    # Unknown float still skips the pillar (does not invent a fail).
+    # Unknown float fails the strict five-pillar screen.
     rep2 = run_backtest(df, "YXT", float_map={})
+    assert rep2["n_trades"] == 0
+
+
+def test_backtest_float_observation_is_point_in_time():
+    df = _pad_to_sessions(squeeze_pullback_break_frame())
+    # A float observed after every backtested session cannot validate history.
+    future_only = {("YXT", "2026-08-10"): 2_000_000}
+    rep = run_backtest(df, "YXT", float_map=future_only)
+    assert rep["n_trades"] == 0
+
+    # An observation available on the first session can be carried forward.
+    asof = {("YXT", "2026-08-03"): 2_000_000}
+    rep2 = run_backtest(df, "YXT", float_map=asof)
     assert rep2["n_trades"] >= 1
 
 

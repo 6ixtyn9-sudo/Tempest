@@ -15,13 +15,13 @@ def get_account_equity(client=None) -> float:
 
 
 def get_open_order_symbols(client=None) -> set[str]:
-    """Symbols with a working (not filled/cancelled) order. A 5-minute
-    poll must not re-submit a DAY bracket that is already resting."""
+    """Symbols with a working (not filled/cancelled) order.
+
+    Broker-state failures deliberately raise. Returning an empty set on an API
+    outage would let a later poll submit duplicate brackets.
+    """
     client = client or get_trading_client()
-    try:
-        orders = client.get_orders()
-    except Exception:
-        return set()
+    orders = client.get_orders()
     out = set()
     done = {"filled", "canceled", "cancelled", "expired", "rejected"}
     for o in orders or []:
@@ -36,11 +36,9 @@ def get_open_order_symbols(client=None) -> set[str]:
 
 
 def get_open_positions(client=None) -> pd.DataFrame:
+    """Return current positions, raising when broker state is unavailable."""
     client = client or get_trading_client()
-    try:
-        positions = client.get_all_positions()
-    except Exception:
-        return pd.DataFrame()
+    positions = client.get_all_positions()
     if not positions:
         return pd.DataFrame()
     rows = []
@@ -149,8 +147,34 @@ def last_closed_fill(client, symbol: str) -> dict | None:
     return best
 
 
-def close_position(client, symbol: str) -> dict:
+def get_order_status(client, client_order_id: str) -> dict:
+    """Return the broker's authoritative state for a submitted parent order.
+
+    ``client_order_id`` is the Tempest-generated id persisted in the journal.
+    Missing/failed lookups raise so reconciliation never invents a fill.
+    """
+    reference = str(client_order_id)
     try:
-        return client.close_position(str(symbol).upper())
-    except Exception as e:  # noqa: BLE001 - best effort
-        return {"error": str(e)}
+        order = client.get_order_by_client_id(reference)
+    except Exception:
+        order = client.get_order_by_id(reference)
+
+    def _value(value):
+        return getattr(value, "value", value)
+
+    return {
+        "id": str(getattr(order, "id", "") or ""),
+        "client_order_id": str(getattr(order, "client_order_id", "") or client_order_id),
+        "status": str(_value(getattr(order, "status", "")) or "").lower(),
+        "filled_avg_price": (
+            float(order.filled_avg_price)
+            if getattr(order, "filled_avg_price", None) is not None
+            else None
+        ),
+        "filled_qty": float(getattr(order, "filled_qty", 0) or 0),
+    }
+
+
+def close_position(client, symbol: str):
+    """Submit a close and propagate broker failures to the caller."""
+    return client.close_position(str(symbol).upper())

@@ -1,6 +1,5 @@
 """Tests for the video-rule encodings: pillars and first-pullback detector."""
 
-import numpy as np
 import pandas as pd
 
 from tempest.features import compute_features
@@ -26,6 +25,7 @@ def test_screen_pillars_fail_each():
         dict(relvol=14.0, total_volume=44_000_000, gap_open=0.01, price=8.0, float_shares=2_870_000),
         dict(relvol=14.0, total_volume=44_000_000, gap_open=0.08, price=25.0, float_shares=2_870_000),
         dict(relvol=14.0, total_volume=44_000_000, gap_open=0.08, price=8.0, float_shares=50_000_000),
+        dict(relvol=14.0, total_volume=44_000_000, gap_open=0.08, price=8.0),
     ]
     for kw in cases:
         p = screen_pillars("YXT", **kw)

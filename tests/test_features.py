@@ -17,6 +17,22 @@ def test_features_present_and_lookahead_free():
     assert not np.isnan(feat["vwap"].iloc[0])
 
 
+def test_compute_features_excludes_extended_hours_bars():
+    df = squeeze_pullback_break_frame()
+    pre = df.iloc[[0]].copy()
+    pre["bar_ts_utc"] = pd.Timestamp("2026-08-03 12:00:00+00:00")
+    post = df.iloc[[0]].copy()
+    post["bar_ts_utc"] = pd.Timestamp("2026-08-03 20:30:00+00:00")
+
+    feat = compute_features(pd.concat([pre, df, post], ignore_index=True))
+
+    assert len(feat) == len(df)
+    ny = feat["bar_ts_utc"].dt.tz_convert("America/New_York")
+    minute = ny.dt.hour * 60 + ny.dt.minute
+    assert minute.min() >= 9 * 60 + 30
+    assert minute.max() < 16 * 60
+
+
 def test_gap_open_is_overnight_gap_on_first_bar_only():
     import pandas as pd
     df = squeeze_pullback_break_frame()

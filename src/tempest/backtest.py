@@ -17,30 +17,50 @@ from tempest.strategy import detect_first_pullback, screen_pillars
 
 
 def load_float_map(path=None) -> dict:
-    """Latest float_shares per symbol from the live screen log.
-
-    The backtest must use the same float pillar the paper screen uses.
-    Missing file / missing row -> None (pillar skipped, never invented).
-    """
+    """Point-in-time float observations keyed by ``(symbol, date_utc)``."""
     p = path if path is not None else DATA_DIR / "screen_log.csv"
     try:
         df = pd.read_csv(p)
     except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
         return {}
-    if df.empty or "symbol" not in df.columns or "float_shares" not in df.columns:
+    required = {"date_utc", "symbol", "float_shares"}
+    if df.empty or not required.issubset(df.columns):
         return {}
     out = {}
     for _, row in df.iterrows():
         try:
-            out[str(row["symbol"]).upper()] = float(row["float_shares"])
+            day = pd.Timestamp(row["date_utc"]).date().isoformat()
+            out[(str(row["symbol"]).upper(), day)] = float(row["float_shares"])
         except (TypeError, ValueError):
             continue
     return out
 
 
-def _symbol_meta(symbol: str, float_map: dict | None = None) -> dict:
-    fmap = float_map if float_map is not None else load_float_map()
-    return {"float_shares": fmap.get(str(symbol).upper())}
+def _float_asof(symbol: str, session, float_map: dict) -> float | None:
+    """Latest float captured no later than the backtested session."""
+    sym = str(symbol).upper()
+    # Compatibility for explicit test/research overrides: {"ABC": 1_000_000}.
+    direct = float_map.get(sym)
+    if direct is not None:
+        try:
+            return float(direct)
+        except (TypeError, ValueError):
+            return None
+    try:
+        day = pd.Timestamp(session).date().isoformat()
+    except (TypeError, ValueError):
+        return None
+    observations = []
+    for key, value in float_map.items():
+        if not isinstance(key, tuple) or len(key) != 2 or str(key[0]).upper() != sym:
+            continue
+        try:
+            observed_day = pd.Timestamp(key[1]).date().isoformat()
+            if observed_day <= day:
+                observations.append((observed_day, float(value)))
+        except (TypeError, ValueError):
+            continue
+    return max(observations, default=(None, None), key=lambda item: item[0])[1]
 
 
 def run_backtest(
@@ -62,11 +82,11 @@ def run_backtest(
             "screen_stats": {"sessions": 0, "passed": 0, "reject_reasons": {}},
         }
 
-    meta = _symbol_meta(symbol, float_map=float_map)
+    fmap = float_map if float_map is not None else load_float_map()
     trades: list[TradeResult] = []
     screen_stats = {"sessions": 0, "passed": 0, "reject_reasons": {}}
 
-    for _, grp in df.groupby("session", sort=True):
+    for session, grp in df.groupby("session", sort=True):
         grp = grp.sort_values("bar_ts_utc").reset_index(drop=True)
         if len(grp) < 2:
             continue
@@ -76,7 +96,6 @@ def run_backtest(
         # total here would let an afternoon volume spike bless a morning
         # entry that had not yet printed 5x.
         gap = float(grp["gap_open"].iloc[0]) if "gap_open" in grp else np.nan
-        open_px = float(grp["open"].iloc[0])
         session_passed = False
         for sig in detect_first_pullback(grp, symbol):
             row = grp.loc[grp["bar_ts_utc"] == sig.entry_ts]
@@ -87,7 +106,7 @@ def run_backtest(
             pillars = screen_pillars(
                 symbol, relvol=asof_relvol, total_volume=asof_vol,
                 gap_open=gap, price=float(sig.entry_price),
-                float_shares=meta["float_shares"],
+                float_shares=_float_asof(symbol, session, fmap),
                 relax=relax,
             )
             if not pillars.passes:

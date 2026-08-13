@@ -17,7 +17,7 @@ Current state
   screener), warehouse, features, strategy replication (5 pillars +
   first-pullback), validation, backtest core, market screen, and a PAPER
   trading layer (Alpaca paper only: bracket entries, stops, risk rails,
-  journal, P&L attribution). Tests pass (34).
+  journal, P&L attribution). Tests pass (53).
 
 Design decisions
   - The 5 pillars are HYPOTHESES with fixed thresholds from the course.
@@ -65,4 +65,17 @@ Known risks
   - Backtest float pillar reads localdata/screen_log.csv (same source as live).
   - Breakout fill is the prior high (gap-through pays the open), not the close.
   - paper_status.csv is tailed to 250 rows on commit.
+
+2026-08-13 — paper safety hardening
+  - Broker positions, open orders and close requests fail closed on API errors.
+  - Submitted entry orders are not called trades until Alpaca confirms a fill;
+    cancelled/expired/rejected parents are terminal non-trades.
+  - Missing closing-fill evidence remains unresolved instead of inventing a
+    stop; submitted horizon/near-close exits are confirmed on a later poll.
+  - Entries require current-day, recent 09:30-16:00 ET bars and are blocked
+    during the final 30 minutes.
+  - Quantity is capped by both $1,000 notional and $50 stop-risk.
+  - Strict backtests require float evidence available as of each session;
+    future float observations cannot validate earlier history.
+  - run_backtest writes dated, versioned JSON evidence committed by capture.
 """
