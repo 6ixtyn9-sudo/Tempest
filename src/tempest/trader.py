@@ -19,7 +19,8 @@ import pandas as pd
 
 from tempest.features import compute_features
 from tempest.risk import (
-    RiskLimits, append_journal, check_entry_ok, load_journal, record_cooldown,
+    RiskLimits, append_journal, check_entry_ok, load_journal,
+    open_journal_entries, record_cooldown,
 )
 from tempest.strategy import detect_first_pullback
 
@@ -175,6 +176,66 @@ class PaperTrader:
             append_journal({**row, "status": "rejected", "reason": str(e)})
             return {"symbol": symbol.upper(), "action": "rejected", "reason": str(e)}
 
+    # -- broker-side closes -----------------------------------------------
+    def _reconcile_broker_closes(self, open_positions: pd.DataFrame, dry_run: bool) -> list[dict]:
+        """Journal stops/TPs the broker filled while we were not looking.
+
+        Without this, a name that hits the pullback-low stop never appears
+        in the journal, daily-loss is understated, and attribute_pnl is empty.
+        """
+        journaled = open_journal_entries()
+        if not journaled:
+            return []
+        live = set()
+        if open_positions is not None and not open_positions.empty:
+            live = set(open_positions["symbol"].astype(str).str.upper())
+        out = []
+        now = datetime.now(timezone.utc)
+        for sym, entry in journaled.items():
+            if sym in live:
+                continue
+            fill = None
+            if not dry_run and hasattr(self.broker, "last_closed_fill"):
+                try:
+                    self.client = self.client or self.broker.get_trading_client()
+                    fill = self.broker.last_closed_fill(self.client, sym)
+                except Exception:
+                    fill = None
+            try:
+                qty = float(entry.get("qty") or 0)
+                avg = float(entry.get("entry_price") or entry.get("price") or 0)
+                stop = float(entry.get("stop_price") or 0)
+            except (TypeError, ValueError):
+                continue
+            if fill:
+                reason = str(fill.get("reason") or "broker_closed")
+                px = float(fill.get("price") or stop or avg)
+                if fill.get("qty"):
+                    qty = float(fill["qty"]) or qty
+            else:
+                # Unknown fill: assume the stop (pessimistic, daily-loss safe).
+                reason = "stop_filled"
+                px = stop if stop > 0 else avg
+            action = reason if reason in ("stop_filled", "tp_filled") else "broker_closed"
+            pnl = (px - avg) * qty
+            if dry_run:
+                out.append({"symbol": sym, "action": "would_reconcile",
+                            "reason": reason, "pnl": round(pnl, 2)})
+                continue
+            append_journal({
+                "timestamp_utc": now.isoformat(), "symbol": sym, "action": action,
+                "side": "sell", "qty": qty, "price": round(px, 4),
+                "status": "filled", "session": str(now.date()),
+                "entry_price": round(avg, 4), "exit_price": round(px, 4),
+                "stop_price": entry.get("stop_price"),
+                "target_price": entry.get("target_price"),
+                "pnl": round(pnl, 2), "reason": reason,
+            })
+            record_cooldown(sym)
+            out.append({"symbol": sym, "action": action, "reason": reason,
+                        "pnl": round(pnl, 2)})
+        return out
+
     # -- exits ------------------------------------------------------------
     def _manage_exits(self, open_positions: pd.DataFrame, dry_run: bool) -> list[dict]:
         if open_positions.empty:
@@ -233,6 +294,7 @@ class PaperTrader:
     def run_once(self, candidates: list[str], dry_run: bool = False) -> dict:
         self.client = None
         open_positions = self.broker.get_open_positions()
+        reconciled = self._reconcile_broker_closes(open_positions, dry_run)
         pending = set()
         if hasattr(self.broker, "get_open_order_symbols"):
             try:
@@ -265,6 +327,6 @@ class PaperTrader:
                 )
         return {
             "open_positions": len(open_positions) if open_positions is not None else 0,
-            "exits": exits,
+            "exits": list(reconciled) + list(exits),
             "entries": entries,
         }

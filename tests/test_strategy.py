@@ -39,8 +39,8 @@ def test_detect_first_pullback_on_textbook_session():
     assert len(sigs) == 1
     s = sigs[0]
     assert isinstance(s, PullbackSignal)
-    # Entry should be at the break candle (~index 7, price ~10.70).
-    assert s.entry_price > 10.60
+    # Conservative fill: prior candle high (or the open if it gaps through).
+    assert 10.50 <= s.entry_price <= 10.70
     assert 10.45 <= s.stop_price <= 10.50   # pullback low
     assert s.target_price > s.entry_price
 

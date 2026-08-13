@@ -37,6 +37,9 @@ class FakeBroker:
             self.positions["symbol"].astype(str).str.upper() != symbol.upper()
         ].reset_index(drop=True)
 
+    def last_closed_fill(self, client, symbol):
+        return getattr(self, "fills", {}).get(str(symbol).upper())
+
 
 class FakeSource:
     """Returns a canned frame per symbol."""
@@ -219,6 +222,30 @@ def test_trader_same_pass_respects_max_open(tmp_path, monkeypatch):
     assert len(entered) == 1
     assert len(blocked) >= 2
     assert len(broker_.orders) == 1
+
+
+def test_trader_journals_broker_stop_when_position_vanishes(tmp_path, monkeypatch):
+    """A stop the broker filled between polls must show up in the journal."""
+    monkeypatch.setattr(risk, "JOURNAL_PATH", tmp_path / "journal.csv")
+    monkeypatch.setattr(risk, "COOLDOWN_PATH", tmp_path / "cooldown.json")
+    append_journal({
+        "timestamp_utc": "2026-08-13T14:00:00+00:00", "symbol": "YXT",
+        "action": "entry", "side": "buy", "qty": 100, "price": 10.50,
+        "status": "submitted", "entry_price": 10.50, "stop_price": 10.20,
+        "target_price": 11.10,
+    })
+    broker_ = FakeBroker()
+    broker_.fills = {"YXT": {"price": 10.20, "reason": "stop_filled", "qty": 100}}
+    trader = PaperTrader(broker_, source=FakeSource({}))
+    result = trader.run_once([], dry_run=False)
+    stops = [e for e in result["exits"] if e["action"] == "stop_filled"]
+    assert len(stops) == 1
+    assert stops[0]["pnl"] == pytest.approx(-30.0)
+    j = risk.load_journal()
+    assert (j["action"] == "stop_filled").any()
+    # second pass must not double-journal
+    result2 = trader.run_once([], dry_run=False)
+    assert not any(e["action"] == "stop_filled" for e in result2["exits"])
 
 
 def test_trader_dry_run_places_nothing(tmp_path, monkeypatch):

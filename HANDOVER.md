@@ -39,9 +39,8 @@ Deferred (do not build without evidence or operator sign-off)
   - Live (real-money) trading — paper must show a real edge first
   - Polygon data (paid) until the pilot shows promise
   - Finviz HTML scraper fallback (TradingView backend may change/throttle)
-  - Order-fill reconciliation against the broker (v2: journal stop/TP fills
-    via order queries; currently broker-closed positions are noted, not
-    filled-price-attributed)
+  - Richer order-fill attribution (partial fills, multi-leg avg) — the
+    next poll now journals stop_filled/tp_filled from broker order history
   - Any live trading, broker integration, real money
   - Options, forex, crypto lanes
 
@@ -61,4 +60,9 @@ Known risks
   - Detector emits the FIRST pullback per session only.
   - Paper poll: same-pass max-open accounting, skip symbols with a resting
     order, refuse screen names with relvol > 50x (halt/resume prints).
+  - Broker-side stop/TP fills are now journaled on the next poll
+    (reconcile against open positions vs unmatched entries).
+  - Backtest float pillar reads localdata/screen_log.csv (same source as live).
+  - Breakout fill is the prior high (gap-through pays the open), not the close.
+  - paper_status.csv is tailed to 250 rows on commit.
 """

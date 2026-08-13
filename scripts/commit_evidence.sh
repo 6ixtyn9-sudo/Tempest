@@ -15,6 +15,19 @@ cd "$(dirname "$0")/.."
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
+# Keep paper_status bounded: header + last 250 rows. A 5-minute poll
+# otherwise grows the file without bound and the git history with it.
+if [ -f localdata/paper_status.csv ]; then
+    python3 - <<'PY'
+from pathlib import Path
+p = Path("localdata/paper_status.csv")
+lines = p.read_text().splitlines()
+if lines:
+    head, body = lines[0], lines[1:]
+    p.write_text("\n".join([head, *body[-250:]]) + "\n")
+PY
+fi
+
 for evidence in localdata/screen_log.csv localdata/trade_journal.csv localdata/paper_status.csv; do
     [ -f "$evidence" ] && git add -f "$evidence"
 done

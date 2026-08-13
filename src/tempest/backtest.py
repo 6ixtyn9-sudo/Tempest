@@ -10,16 +10,37 @@ the CostModel. Output is a list of TradeResults plus per-bucket breakdowns
 import numpy as np
 import pandas as pd
 
+from tempest.config import DATA_DIR
 from tempest.features import compute_features
 from tempest.validation import CostModel, TradeResult, bucket_for, summarize
 from tempest.strategy import detect_first_pullback, screen_pillars
 
 
-def _symbol_meta(symbol: str) -> dict:
-    """Best-effort metadata (float, etc.). v1: float unknown -> None (the
-    float pillar is skipped rather than assumed). Later: from yfinance info
-    or the Finviz scraper."""
-    return {"float_shares": None}
+def load_float_map(path=None) -> dict:
+    """Latest float_shares per symbol from the live screen log.
+
+    The backtest must use the same float pillar the paper screen uses.
+    Missing file / missing row -> None (pillar skipped, never invented).
+    """
+    p = path if path is not None else DATA_DIR / "screen_log.csv"
+    try:
+        df = pd.read_csv(p)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        return {}
+    if df.empty or "symbol" not in df.columns or "float_shares" not in df.columns:
+        return {}
+    out = {}
+    for _, row in df.iterrows():
+        try:
+            out[str(row["symbol"]).upper()] = float(row["float_shares"])
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _symbol_meta(symbol: str, float_map: dict | None = None) -> dict:
+    fmap = float_map if float_map is not None else load_float_map()
+    return {"float_shares": fmap.get(str(symbol).upper())}
 
 
 def run_backtest(
@@ -28,6 +49,7 @@ def run_backtest(
     cost_model: CostModel | None = None,
     hold_bars: int = 15,
     relax: bool = False,
+    float_map: dict | None = None,
 ) -> dict:
     """Run the full backtest for one symbol's 1m frame. Returns the report
     dict: signals, trades, summary, per-bucket summaries."""
@@ -40,7 +62,7 @@ def run_backtest(
             "screen_stats": {"sessions": 0, "passed": 0, "reject_reasons": {}},
         }
 
-    meta = _symbol_meta(symbol)
+    meta = _symbol_meta(symbol, float_map=float_map)
     trades: list[TradeResult] = []
     screen_stats = {"sessions": 0, "passed": 0, "reject_reasons": {}}
 

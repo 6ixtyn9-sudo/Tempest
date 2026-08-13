@@ -39,6 +39,17 @@ def test_run_backtest_produces_trades_and_buckets(tmp_path):
     assert rep["n_trades"] >= 1
 
 
+def test_backtest_applies_float_pillar_from_screen_log(tmp_path):
+    from tempest.backtest import run_backtest
+    df = _pad_to_sessions(squeeze_pullback_break_frame())
+    # Same frame: with a 50M float the session must not produce trades.
+    rep = run_backtest(df, "YXT", float_map={"YXT": 50_000_000})
+    assert rep["n_trades"] == 0
+    # Unknown float still skips the pillar (does not invent a fail).
+    rep2 = run_backtest(df, "YXT", float_map={})
+    assert rep2["n_trades"] >= 1
+
+
 def test_run_backtest_empty_frame_graceful():
     import pandas as pd
     rep = run_backtest(pd.DataFrame(), "YXT")

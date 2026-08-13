@@ -40,9 +40,9 @@ news vs no-news, horizon).
 - Data adapter: yfinance 1-minute bars (pilot, ~30 days) behind a common
   interface; Polygon adapter slots in later for real history.
 - Video-rule replication: mechanical 5-pillar screen + first-pullback detector.
-- Honest backtest: costs (spread/slippage), chronological split, walk-forward,
-  per-horizon follow-through, per-bucket breakdown.
-- Nothing live. No broker. No real money. Backtest before anything else.
+- Honest backtest: costs (spread/slippage), as-of pillar screen (no
+  look-ahead), per-horizon follow-through, per-bucket breakdown.
+- Alpaca PAPER only (never live keys). No real money until paper shows an edge.
 
 ## Quickstart
 
@@ -59,7 +59,6 @@ The five-pillar screen runs server-side on TradingView's scanner and returns
 the rare qualifying movers (gap >= 2%, relvol >= 5x, price $2-20, float < 20M,
 volume > 1M) in one request. Each day's screen is logged to
 localdata/screen_log.csv so evidence accumulates over time.
-```
 
 ## Paper trading (Alpaca PAPER only)
 
@@ -160,7 +159,7 @@ scripts/
 
 ## Doctrine
 
-- Backtest before anything. No live trading, no broker, no real money.
+- Backtest before anything. Paper is allowed; live money is not.
 - Fixed-prior thresholds (the pillars are domain priors, not fits).
 - No look-ahead: signals use only bars at/before the entry candle.
 - Honest costs: microcap spreads/slippage are brutal; the backtest nets them.

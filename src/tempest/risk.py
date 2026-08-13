@@ -50,9 +50,33 @@ def load_journal() -> pd.DataFrame:
 def append_journal(row: dict) -> None:
     df = load_journal()
     clean = {c: row.get(c) for c in _JOURNAL_COLUMNS}
-    df = pd.concat([df, pd.DataFrame([clean])], ignore_index=True)
+    add = pd.DataFrame([clean], columns=_JOURNAL_COLUMNS)
+    if df.empty:
+        df = add
+    else:
+        df = pd.concat([df, add], ignore_index=True)
     JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(JOURNAL_PATH, index=False)
+
+
+def open_journal_entries(journal: pd.DataFrame | None = None) -> dict:
+    """Last unmatched entry per symbol (no later exit/stop/tp)."""
+    df = load_journal() if journal is None else journal
+    if df is None or df.empty or "action" not in df.columns:
+        return {}
+    open_rows: dict = {}
+    ordered = df.sort_values("timestamp_utc") if "timestamp_utc" in df.columns else df
+    for _, row in ordered.iterrows():
+        sym = str(row.get("symbol", "")).upper()
+        if not sym:
+            continue
+        action = str(row.get("action", ""))
+        status = str(row.get("status", "") or "")
+        if action == "entry" and status not in ("rejected", "dry_run"):
+            open_rows[sym] = row
+        elif action in ("exit", "stop_filled", "tp_filled", "broker_closed"):
+            open_rows.pop(sym, None)
+    return open_rows
 
 
 def today_realized_pnl() -> float:

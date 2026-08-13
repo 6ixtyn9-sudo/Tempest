@@ -205,7 +205,10 @@ def _detect_session(grp, symbol, squeeze_bars, max_retrace, rr_target):
         k = j
         while k < n:
             if high[k] > high[k - 1] and high[k] > squeeze_high * 0.98:
-                entry_price = max(close[k], o[k])  # fill at the break
+                # Conservative fill: the break of the prior high. If the
+                # crossing bar gaps through, pay the open (worse). Never
+                # the close — a long wick above the prior high is not a fill.
+                entry_price = max(float(high[k - 1]), float(o[k]))
                 stop_price = pb_low
                 risk = entry_price - stop_price
                 if risk <= 0:

@@ -97,6 +97,58 @@ def submit_bracket(
     ))
 
 
+def last_closed_fill(client, symbol: str) -> dict | None:
+    """Latest filled exit on `symbol`: {price, reason, qty}.
+
+    Used to journal a broker-side stop/TP that this process did not close.
+    Returns None if the order history cannot be read.
+    """
+    try:
+        from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
+        orders = client.get_orders(GetOrdersRequest(
+            status=QueryOrderStatus.CLOSED,
+            symbols=[str(symbol).upper()],
+            limit=30,
+        ))
+    except Exception:
+        try:
+            orders = client.get_orders()
+        except Exception:
+            return None
+    best = None
+    best_ts = None
+    for o in orders or []:
+        try:
+            if str(getattr(o, "symbol", "")).upper() != str(symbol).upper():
+                continue
+            status = str(getattr(o, "status", "") or "").lower()
+            if status != "filled":
+                continue
+            side = str(getattr(o, "side", "") or "").lower()
+            if side not in ("sell", "order_side.sell"):
+                continue
+            px = getattr(o, "filled_avg_price", None) or getattr(o, "limit_price", None)
+            if px is None:
+                continue
+            otype = str(getattr(o, "order_type", getattr(o, "type", "")) or "").lower()
+            if "stop" in otype:
+                reason = "stop_filled"
+            elif "limit" in otype:
+                reason = "tp_filled"
+            else:
+                reason = "broker_closed"
+            ts = getattr(o, "filled_at", None) or getattr(o, "updated_at", None)
+            if best_ts is not None and ts is not None and ts < best_ts:
+                continue
+            best_ts = ts
+            qty = getattr(o, "filled_qty", None) or getattr(o, "qty", None)
+            best = {"price": float(px), "reason": reason, "qty": float(qty or 0)}
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return best
+
+
 def close_position(client, symbol: str) -> dict:
     try:
         return client.close_position(str(symbol).upper())
