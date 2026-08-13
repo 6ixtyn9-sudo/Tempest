@@ -17,7 +17,6 @@ jobs:
     steps:
       - name: Check ET trading window
         id: window
-        if: github.event_name == 'schedule'
         run: |
           ET_HHMM=$(TZ=America/New_York date +%H:%M)
           ET_DOW=$(TZ=America/New_York date +%u)
@@ -33,11 +32,11 @@ jobs:
           esac
 
       - name: Checkout
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Python
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -45,11 +44,11 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install dependencies
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         run: python3 -m pip install -r requirements.txt
 
       - name: Restore localdata cache
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         uses: actions/cache/restore@v4
         with:
           path: localdata
@@ -58,12 +57,12 @@ jobs:
             tempest-localdata-
 
       - name: Run daily capture (screen + backtest)
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         run: bash scripts/capture_daily.sh
 
       - name: Run paper trade (Alpaca PAPER only)
         id: paper
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
@@ -85,18 +84,18 @@ jobs:
           exit 0
 
       - name: Commit paper-trade journal
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         run: bash scripts/commit_evidence.sh "paper trade journal"
 
       - name: Save localdata cache
-        if: steps.window.outputs.run != 'false'
+        if: steps.window.outputs.run == 'true'
         uses: actions/cache/save@v4
         with:
           path: localdata
           key: tempest-localdata-${{ github.run_id }}
 
       - name: Fail run if paper trade failed
-        if: steps.window.outputs.run != 'false' && steps.paper.outputs.paper_exit != '' && steps.paper.outputs.paper_exit != '0'
+        if: steps.window.outputs.run == 'true' && steps.paper.outputs.paper_exit != '' && steps.paper.outputs.paper_exit != '0'
         run: |
           echo "Paper trade exited ${{ steps.paper.outputs.paper_exit }} - authentication or broker error."
           echo "Inspect localdata/paper_status.csv for the stage that failed."
