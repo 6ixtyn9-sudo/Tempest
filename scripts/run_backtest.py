@@ -29,6 +29,9 @@ def main() -> int:
     p.add_argument("--spread-bps", type=float, default=25.0)
     p.add_argument("--slippage-bps", type=float, default=25.0)
     p.add_argument("--hold-bars", type=int, default=15)
+    p.add_argument("--relax", action="store_true",
+                   help="DIAGNOSTIC: loosen pillars (relvol>=2x, gap>=1%, skip price/float) "
+                        "to validate backtest mechanics on large-cap data")
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
 
@@ -48,7 +51,8 @@ def main() -> int:
         if df.empty:
             print(f"{sym}: no warehouse data, skipping")
             continue
-        rep = run_backtest(df, sym, cost_model=cost, hold_bars=args.hold_bars)
+        rep = run_backtest(df, sym, cost_model=cost, hold_bars=args.hold_bars,
+                          relax=args.relax)
         reports.append(rep)
         s = rep["summary"]
         print(f"\n== {sym}: {s.get('n', 0)} trades | gross {s.get('gross_mean', 0):.4f} "

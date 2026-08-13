@@ -69,19 +69,29 @@ def screen_pillars(
     gap_open: float,
     price: float,
     float_shares: Optional[float] = None,
+    relax: bool = False,
 ) -> Pillars:
-    """Evaluate the five pillars for one symbol on one session."""
+    """Evaluate the five pillars for one symbol on one session.
+
+    relax=True is a DIAGNOSTIC knob for validating the backtest mechanics on
+    large-cap data (SOFI/PLTR/HOOD/COIN): it loosens the demand pillars
+    (relvol>=2x, gap>=1%) and skips price/float. It is NOT a strategy change
+    — the strict pillars remain the default.
+    """
     reasons = []
-    if not np.isfinite(relvol) or relvol < REL_VOL_MIN:
-        reasons.append(f"relvol {relvol:.1f} < {REL_VOL_MIN}")
+    relvol_min = 2.0 if relax else REL_VOL_MIN
+    gap_min = 0.01 if relax else GAP_MIN
+    if not np.isfinite(relvol) or relvol < relvol_min:
+        reasons.append(f"relvol {relvol:.1f} < {relvol_min}")
     if total_volume < TOTAL_VOL_MIN:
         reasons.append(f"total_volume {int(total_volume):,} < {TOTAL_VOL_MIN:,}")
-    if not np.isfinite(gap_open) or gap_open < GAP_MIN:
-        reasons.append(f"gap {gap_open:.4f} < {GAP_MIN}")
-    if not (PRICE_MIN <= price <= PRICE_MAX):
-        reasons.append(f"price {price:.2f} outside [{PRICE_MIN},{PRICE_MAX}]")
-    if float_shares is not None and float_shares >= FLOAT_MAX:
-        reasons.append(f"float {float_shares:,} >= {FLOAT_MAX:,}")
+    if not np.isfinite(gap_open) or gap_open < gap_min:
+        reasons.append(f"gap {gap_open:.4f} < {gap_min}")
+    if not relax:
+        if not (PRICE_MIN <= price <= PRICE_MAX):
+            reasons.append(f"price {price:.2f} outside [{PRICE_MIN},{PRICE_MAX}]")
+        if float_shares is not None and float_shares >= FLOAT_MAX:
+            reasons.append(f"float {float_shares:,} >= {FLOAT_MAX:,}")
     return Pillars(
         symbol=symbol, relvol=relvol, total_volume=total_volume,
         gap_open=gap_open, price=price, float_shares=float_shares,

@@ -27,6 +27,7 @@ def run_backtest(
     symbol: str,
     cost_model: CostModel | None = None,
     hold_bars: int = 15,
+    relax: bool = False,
 ) -> dict:
     """Run the full backtest for one symbol's 1m frame. Returns the report
     dict: signals, trades, summary, per-bucket summaries."""
@@ -52,6 +53,7 @@ def run_backtest(
         pillars = screen_pillars(
             symbol, relvol=relvol, total_volume=total_vol,
             gap_open=gap, price=open_px, float_shares=meta["float_shares"],
+            relax=relax,
         )
         if not pillars.passes:
             continue

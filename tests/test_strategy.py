@@ -61,3 +61,17 @@ def test_no_signal_when_no_squeeze():
     feat = compute_features(df)
     sigs = detect_first_pullback(feat, "YXT")
     assert sigs == []
+
+
+def test_screen_pillars_relax_is_diagnostic_only():
+    """relax=True loosens demand pillars and skips price/float, but the
+    strict defaults remain."""
+    # Strict: fails on relvol and price.
+    strict = screen_pillars("SOFI", relvol=3.0, total_volume=40_000_000,
+                            gap_open=0.015, price=25.0, float_shares=1_000_000_000)
+    assert strict.passes is False
+    # Relaxed: passes (relvol 3>=2, gap 1.5%>=1%, price/float skipped).
+    relaxed = screen_pillars("SOFI", relvol=3.0, total_volume=40_000_000,
+                             gap_open=0.015, price=25.0,
+                             float_shares=1_000_000_000, relax=True)
+    assert relaxed.passes is True
