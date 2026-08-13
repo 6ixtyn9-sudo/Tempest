@@ -29,6 +29,8 @@ SCAN_URL = "https://scanner.tradingview.com/america/scan"
 SCAN_CACHE_PATH = DATA_DIR / "screen_cache.json"
 SCAN_CACHE_MINUTES = 15
 
+LAST_ERROR: str | None = None
+
 _HEADERS = {
     "Content-Type": "application/json",
     "User-Agent": (
@@ -101,6 +103,8 @@ def screen(filters: list[dict] | None = None, use_cache: bool = True) -> list[di
     """Run the TradingView scan. Returns rows:
     [{symbol, close, change, gap_pct, relvol, float_shares, volume}].
     Empty list on any failure (never raises)."""
+    global LAST_ERROR
+    LAST_ERROR = None
     if use_cache:
         cached = _read_cache()
         if cached is not None:
@@ -112,7 +116,8 @@ def screen(filters: list[dict] | None = None, use_cache: bool = True) -> list[di
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        LAST_ERROR = f"{type(e).__name__}: {e}"
         return []
     rows = []
     for item in data.get("data", []):

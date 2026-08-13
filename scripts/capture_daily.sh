@@ -15,7 +15,9 @@ PYTHONPATH=src python3 scripts/run_backtest.py
 echo "=== commit results ==="
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
-git add localdata/
+for evidence in localdata/screen_log.csv localdata/trade_journal.csv; do
+    [ -f "$evidence" ] && git add -f "$evidence"
+done
 if git diff --cached --quiet; then
     echo "No Tempest data changes to commit."
 else

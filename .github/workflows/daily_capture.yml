@@ -40,12 +40,15 @@ jobs:
         run: bash scripts/capture_daily.sh
 
       - name: Run paper trade (Alpaca PAPER only)
-        if: ${{ secrets.ALPACA_API_KEY != '' && secrets.ALPACA_SECRET_KEY != '' }}
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           TEMPEST_PAPER: "1"
         run: |
+          if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
+            echo "Alpaca secrets not set - skipping paper trade."
+            exit 0
+          fi
           PYTHONPATH=src python3 scripts/paper_trade.py || echo "paper trade failed (non-fatal for capture)"
 
       - name: Save localdata cache

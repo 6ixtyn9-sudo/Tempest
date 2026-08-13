@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import pandas as pd  # noqa: E402
 
 from tempest.config import DATA_DIR  # noqa: E402
+from tempest.sources import tradingview  # noqa: E402
 from tempest.sources.tradingview import build_filter, screen  # noqa: E402
 from tempest.strategy import screen_pillars  # noqa: E402
 
@@ -51,8 +52,12 @@ def main() -> int:
     filters = build_filter(relvol_min=args.min_relvol, gap_min_pct=args.min_gap)
     rows = screen(filters, use_cache=not args.no_cache)
     if not rows:
-        print("Screen returned no rows (blocked? empty market? cache?).")
-        return 1
+        if tradingview.LAST_ERROR:
+            print(f"Screen FAILED to reach the scanner: {tradingview.LAST_ERROR}")
+            return 1
+        print("Screen returned no rows - no qualifiers today (normal; the "
+              "five pillars are rare). Nothing to log.")
+        return 0
 
     now = datetime.now(timezone.utc)
     log = _load_log()
