@@ -12,7 +12,7 @@ import pandas as pd
 
 from tempest.features import compute_features
 from tempest.validation import CostModel, TradeResult, bucket_for, summarize
-from tempest.video_rules import detect_first_pullback, screen_pillars
+from tempest.strategy import detect_first_pullback, screen_pillars
 
 
 def _symbol_meta(symbol: str) -> dict:

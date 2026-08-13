@@ -14,7 +14,7 @@ Why a new repo and not a Price feature
 
 Current state
   Scaffold: data adapter (yfinance 1m pilot), warehouse, features,
-  video-rule replication (5 pillars + first-pullback), validation,
+  strategy replication (5 pillars + first-pullback), validation,
   backtest core, tests. Nothing live.
 
 Design decisions

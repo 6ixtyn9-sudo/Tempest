@@ -36,12 +36,13 @@ news vs no-news, horizon).
 ## Quickstart
 
 ```
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 PYTHONPATH=src python3 -m pytest -q
-# fetch 1m bars for a small universe (<=30 days via yfinance)
-PYTHONPATH=src python3 scripts/build_warehouse.py --symbols YXT GFAI NUKK --days 30
+# fetch 1m bars for a small universe (<=30 days via yfinance; the adapter
+# chunks requests into 7-day windows to respect Yahoo's server cap)
+PYTHONPATH=src python3 scripts/build_warehouse.py --symbols SOFI PLTR HOOD COIN --days 30
 # run the replication backtest over whatever is in the warehouse
-PYTHONPATH=src python3 scripts/run_backtest.py --min-float 0 --max-float 20
+PYTHONPATH=src python3 scripts/run_backtest.py
 ```
 
 ## Layout
@@ -51,7 +52,7 @@ src/tempest/
   config.py        # paths, env, symbol hygiene
   warehouse.py     # parquet warehouse, dedup, keep-last
   features.py      # gap_open, relvol, 9EMA, VWAP, day-session labels
-  video_rules.py   # 5 pillars + first-pullback detector (mechanical)
+  strategy.py      # 5 pillars + first-pullback detector (mechanical)
   validation.py    # cost adjustment, chronological split, walk-forward
   backtest.py      # event simulation + per-bucket aggregation
   sources/
