@@ -207,6 +207,8 @@ def main() -> int:
         lo, hi, pgt = bootstrap_ci(nets, rng)
         win = 100.0 * (nets > 0).mean()
         marker = "  <- incumbent" if (sq, mrf) == INCUMBENT else ""
+        if hi < 0:
+            marker += "  ** PROVEN NEGATIVE **"
         print(f"{sq:>3}{mrf:>10.3f}{len(nets):>6}{win:>7.1f}"
               f"{100 * nets.mean():>11.3f}"
               f"   [{100 * lo:>6.2f},{100 * hi:>6.2f}]{pgt:>8.1%}{marker}")
@@ -244,6 +246,39 @@ def main() -> int:
 
     if not any(v["adopt"] for v in verdicts):
         print("\nVERDICT: no configuration clears the bar. Change nothing.")
+
+    # A parameter sweep answers "which setting is best". It does NOT answer
+    # "is any setting viable". Report that separately -- otherwise a strategy
+    # that loses money at EVERY setting reads as a clean "change nothing".
+    proven_negative = [
+        (cfg, nets) for cfg, nets in sorted(results.items())
+        if len(nets) > 0 and bootstrap_ci(nets, rng)[1] < 0
+    ]
+    if proven_negative:
+        print("\n" + "=" * 62)
+        print("STRATEGY-LEVEL WARNING")
+        print("=" * 62)
+        print(f"{len(proven_negative)} of {len([n for n in results.values() if len(n)])} "
+              "configurations have a 95% CI lying ENTIRELY BELOW ZERO.")
+        print("These are not 'unproven' -- they are demonstrated losers:")
+        for (sq, mrf), nets in proven_negative:
+            lo, hi, _ = bootstrap_ci(nets, rng)
+            print(f"    sq={sq} mrf={mrf:<6} n={len(nets):<4} "
+                  f"mean {100 * nets.mean():+.3f}%/trade  "
+                  f"CI [{100 * lo:.2f}, {100 * hi:.2f}]")
+        incumbent_nets = results.get(INCUMBENT, np.array([]))
+        if len(incumbent_nets):
+            ilo, ihi, _ = bootstrap_ci(incumbent_nets, rng)
+            if ihi < 0:
+                print("\n  The INCUMBENT is among them. Tuning cannot fix this:")
+                print("  the edge is absent at every setting tested, so the")
+                print("  problem is the strategy or the cost model, not the")
+                print("  parameters. Do not deploy real capital on this.")
+        print("\n  Breakeven check: with a 2R target and a round trip of "
+              f"{COST.round_trip_bps():.0f} bps,")
+        print("  a stop of size r needs win rate (r + c) / 3r. At r = 0.3% that")
+        print("  is 144% -- mathematically impossible. Stops must be WIDER than")
+        print("  ~2% for a 2R target to be reachable at this cost level.")
     if args.json:
         args.json.write_text(json.dumps(
             {"universe_symbols": len(frames), "sessions": sessions,
