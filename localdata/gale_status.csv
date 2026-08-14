@@ -1,18 +1,4 @@
 timestamp_utc,stage,detail
-2026-08-14T16:00:35.926428+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
-2026-08-14T16:05:28.039927+00:00,client_ok,Gale paper client constructed
-2026-08-14T16:05:28.045517+00:00,skip_extreme,CGTL: relvol=130.7 > 50.0
-2026-08-14T16:05:28.048024+00:00,skip_extreme,HHS: relvol=175.6 > 50.0
-2026-08-14T16:05:28.109334+00:00,equity,100000.00
-2026-08-14T16:05:28.282037+00:00,pass_done,open=0 slots=0 exits=0 entries=blocked=4
-2026-08-14T16:05:28.284984+00:00,entry_blocked,AKAN: entry window closed: after 11:00 ET
-2026-08-14T16:05:28.287390+00:00,entry_blocked,LBGJ: entry window closed: after 11:00 ET
-2026-08-14T16:05:28.289669+00:00,entry_blocked,MF: entry window closed: after 11:00 ET
-2026-08-14T16:05:28.292074+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
-2026-08-14T16:10:28.631941+00:00,client_ok,Gale paper client constructed
-2026-08-14T16:10:28.638130+00:00,skip_extreme,CGTL: relvol=130.7 > 50.0
-2026-08-14T16:10:28.640792+00:00,skip_extreme,HHS: relvol=175.6 > 50.0
-2026-08-14T16:10:28.704434+00:00,equity,100000.00
 2026-08-14T16:10:28.858506+00:00,pass_done,open=0 slots=0 exits=0 entries=blocked=4
 2026-08-14T16:10:28.861643+00:00,entry_blocked,AKAN: entry window closed: after 11:00 ET
 2026-08-14T16:10:28.864121+00:00,entry_blocked,LBGJ: entry window closed: after 11:00 ET
@@ -249,3 +235,17 @@ timestamp_utc,stage,detail
 2026-08-14T17:45:32.060284+00:00,entry_blocked,MF: entry window closed: after 11:00 ET
 2026-08-14T17:45:32.062719+00:00,entry_blocked,NMAX: entry window closed: after 11:00 ET
 2026-08-14T17:45:32.065195+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.330830+00:00,client_ok,Gale paper client constructed
+2026-08-14T17:50:28.336298+00:00,skip_extreme,CGTL: relvol=133.5 > 50.0
+2026-08-14T17:50:28.338989+00:00,skip_extreme,HHS: relvol=188.6 > 50.0
+2026-08-14T17:50:28.426661+00:00,equity,100000.00
+2026-08-14T17:50:28.712314+00:00,pass_done,open=0 slots=0 exits=0 entries=blocked=9
+2026-08-14T17:50:28.715320+00:00,entry_blocked,AKAN: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.717766+00:00,entry_blocked,CAPR: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.720279+00:00,entry_blocked,EMAT: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.722759+00:00,entry_blocked,GRSD: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.725286+00:00,entry_blocked,IMXI: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.727879+00:00,entry_blocked,LBGJ: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.730337+00:00,entry_blocked,MF: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.732890+00:00,entry_blocked,NMAX: entry window closed: after 11:00 ET
+2026-08-14T17:50:28.735395+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
