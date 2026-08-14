@@ -47,6 +47,12 @@ from tempest.validation import CostModel  # noqa: E402
 from tempest.warehouse import load_from_warehouse  # noqa: E402
 
 COST = CostModel()
+
+# A bootstrap CI is meaningless below a handful of observations: resampling
+# a single point returns that point, giving a zero-width "CI" that then reads
+# as a confident verdict. Nothing under this n gets a proven-negative label.
+MIN_N_FOR_CI = 10
+
 INCUMBENT = (SQUEEZE_BARS, MIN_RISK_FRACTION)
 
 
@@ -240,8 +246,10 @@ def main() -> int:
         lo, hi, pgt = bootstrap_ci(nets, rng)
         win = 100.0 * (nets > 0).mean()
         marker = "  <- incumbent" if (sq, mrf) == INCUMBENT else ""
-        if hi < 0:
+        if hi < 0 and len(nets) >= MIN_N_FOR_CI:
             marker += "  ** PROVEN NEGATIVE **"
+        elif len(nets) < MIN_N_FOR_CI:
+            marker += f"  (n<{MIN_N_FOR_CI}: CI not meaningful)"
         print(f"{sq:>3}{mrf:>10.3f}{len(nets):>6}{win:>7.1f}"
               f"{100 * nets.mean():>11.3f}"
               f"   [{100 * lo:>6.2f},{100 * hi:>6.2f}]{pgt:>8.1%}"
@@ -255,7 +263,13 @@ def main() -> int:
         })
 
     base = results.get(INCUMBENT, np.array([]))
+    comparisons = len([n for cfg, n in results.items()
+                       if cfg != INCUMBENT and len(n) > 0])
+    bonferroni = 0.05 / max(comparisons, 1)
     print(f"\nHead-to-head vs incumbent {INCUMBENT} (n={len(base)}):")
+    print(f"  {comparisons} comparisons -> Bonferroni threshold "
+          f"p < {bonferroni:.4f} (not 0.05).")
+    print("  Testing 21 configs at p<0.05 expects ~1 false positive by chance.")
     verdicts = []
     for (sq, mrf), nets in sorted(results.items()):
         if (sq, mrf) == INCUMBENT or len(nets) == 0 or len(base) == 0:
@@ -264,7 +278,7 @@ def main() -> int:
         lo, hi, _ = bootstrap_ci(nets, rng)
         enough = len(nets) >= args.min_n and len(base) >= args.min_n
         excludes_zero = lo > 0
-        significant = pval < 0.05
+        significant = pval < bonferroni
         act = enough and excludes_zero and significant
         why = []
         if not enough:
@@ -272,7 +286,7 @@ def main() -> int:
         if not excludes_zero:
             why.append("CI spans 0")
         if not significant:
-            why.append(f"p={pval:.3f}")
+            why.append(f"p={pval:.3f}>={bonferroni:.4f}")
         verdict = "ADOPT" if act else "keep incumbent (" + ", ".join(why) + ")"
         print(f"  sq={sq} mrf={mrf:<6} diff {100 * (nets.mean() - base.mean()):+7.3f}%/trade"
               f"  p={pval:<6.3f}  {verdict}")
@@ -282,12 +296,19 @@ def main() -> int:
     if not any(v["adopt"] for v in verdicts):
         print("\nVERDICT: no configuration clears the bar. Change nothing.")
 
+    print("\nNOTE: min_risk configurations are NESTED, not independent. A")
+    print("  higher floor yields a strict SUBSET of the lower floor's signals")
+    print("  (verified: every mrf=0.02 signal is also an mrf=0.003 signal).")
+    print("  Comparing them is a survivorship comparison -- it asks 'were the")
+    print("  wide-stop trades the good ones', which is selection after the")
+    print("  fact, not an independent hypothesis. Confirm out-of-sample.")
+
     # A parameter sweep answers "which setting is best". It does NOT answer
     # "is any setting viable". Report that separately -- otherwise a strategy
     # that loses money at EVERY setting reads as a clean "change nothing".
     proven_negative = [
         (cfg, nets) for cfg, nets in sorted(results.items())
-        if len(nets) > 0 and bootstrap_ci(nets, rng)[1] < 0
+        if len(nets) >= MIN_N_FOR_CI and bootstrap_ci(nets, rng)[1] < 0
     ]
     if proven_negative:
         print("\n" + "=" * 62)
