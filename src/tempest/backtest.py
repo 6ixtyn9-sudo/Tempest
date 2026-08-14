@@ -68,6 +68,116 @@ def _float_asof(symbol: str, session, float_map: dict) -> float | None:
     return max(observations, default=(None, None), key=lambda item: item[0])[1]
 
 
+def _no_signal_reason(grp, symbol: str) -> str:
+    """Classify why a session produced no first-pullback signal.
+
+    Mirrors the stages of strategy._detect_session so the backtest report
+    explains its own emptiness instead of silently dropping the session.
+    Returns the FIRST binding constraint, which is the actionable one.
+    """
+    from tempest.strategy import (
+        MAX_RETRACE,
+        MIN_RISK_FRACTION,
+        SQUEEZE_BARS,
+    )
+
+    if len(grp) < SQUEEZE_BARS + 2:
+        return "session too short"
+
+    o = grp["open"].values
+    close = grp["close"].values
+    high = grp["high"].values
+    low = grp["low"].values
+    vol = grp["volume"].values
+    vwap = grp["vwap"].values if "vwap" in grp else None
+    ema9 = grp["ema9"].values if "ema9" in grp else None
+    if vwap is None or ema9 is None:
+        return "features missing (vwap/ema9)"
+
+    n = len(grp)
+    runs = []
+    i = 0
+    while i < n - 1:
+        if close[i] <= o[i]:
+            i += 1
+            continue
+        run = 1
+        while i + run < n and close[i + run] > o[i + run] and run < 12:
+            run += 1
+        runs.append(run)
+        i += run
+
+    if not runs:
+        return "no green candles"
+    if max(runs) < SQUEEZE_BARS:
+        return f"no squeeze: longest green run {max(runs)} < {SQUEEZE_BARS}"
+
+    # A squeeze existed; find which downstream stage killed every attempt.
+    stages = {"pullback broke vwap": 0, "pullback broke ema9": 0,
+              "pullback volume heavy": 0, "no pullback candle": 0,
+              "retrace > max": 0, "risk below floor": 0, "no breakout": 0}
+    i = 0
+    while i < n - 1:
+        if close[i] <= o[i]:
+            i += 1
+            continue
+        run = 1
+        while i + run < n and close[i + run] > o[i + run] and run < 12:
+            run += 1
+        if run < SQUEEZE_BARS:
+            i += run
+            continue
+        squeeze_high = max(high[i:i + run])
+        base = min(low[i:i + run])
+        avg_vol = float(np.mean(vol[i:i + run]))
+        j = i + run
+        pb_start = j
+        killed = None
+        while j < n and close[j] <= o[j]:
+            if low[j] < vwap[j]:
+                killed = "pullback broke vwap"
+                break
+            if close[j] < ema9[j]:
+                killed = "pullback broke ema9"
+                break
+            if close[j] < o[j] and vol[j] > avg_vol:
+                killed = "pullback volume heavy"
+                break
+            j += 1
+        if killed:
+            stages[killed] += 1
+            i = max(j, i + 1)
+            continue
+        if j == pb_start:
+            stages["no pullback candle"] += 1
+            i = max(j, i + 1)
+            continue
+        pb_low = min(low[pb_start:j])
+        retrace = (squeeze_high - pb_low) / (squeeze_high - base + 1e-9)
+        if retrace > MAX_RETRACE:
+            stages["retrace > max"] += 1
+            i = j
+            continue
+        k = j
+        broke = False
+        while k < n:
+            if high[k] > high[k - 1] and high[k] > squeeze_high * 0.98:
+                broke = True
+                entry = max(float(high[k - 1]), float(o[k]))
+                if entry - pb_low < MIN_RISK_FRACTION * entry:
+                    stages["risk below floor"] += 1
+                break
+            k += 1
+        if not broke:
+            stages["no breakout"] += 1
+        i = j
+
+    hit = {k: v for k, v in stages.items() if v}
+    if not hit:
+        return "squeeze found, unclassified"
+    return max(hit.items(), key=lambda kv: kv[1])[0]
+
+
 def run_backtest(
     warehouse_df: pd.DataFrame,
     symbol: str,
@@ -84,19 +194,26 @@ def run_backtest(
         return {
             "symbol": symbol, "n_signals": 0, "n_trades": 0,
             "summary": {"n": 0}, "bucket_summary": {}, "trades": [],
-            "screen_stats": {"sessions": 0, "passed": 0, "reject_reasons": {}},
+            "screen_stats": {
+                "sessions": 0, "passed": 0, "reject_reasons": {},
+                "no_signal_sessions": 0, "no_signal_reasons": {},
+            },
         }
 
     fmap = float_map if float_map is not None else load_float_map()
     trades: list[TradeResult] = []
     eligible_signals = 0
-    screen_stats = {"sessions": 0, "passed": 0, "reject_reasons": {}}
+    screen_stats = {
+        "sessions": 0, "passed": 0, "reject_reasons": {},
+        "no_signal_sessions": 0, "no_signal_reasons": {},
+    }
 
     for session, grp in df.groupby("session", sort=True):
         grp = grp.sort_values("bar_ts_utc").reset_index(drop=True)
         if len(grp) < 2:
             continue
         screen_stats["sessions"] += 1
+        session_signals = 0
         # Gap is a session-level prior (open vs prior close). Relvol and
         # volume must be as-of the SIGNAL bar — using the full session
         # total here would let an afternoon volume spike bless a morning
@@ -104,6 +221,7 @@ def run_backtest(
         gap = float(grp["gap_open"].iloc[0]) if "gap_open" in grp else np.nan
         session_passed = False
         for sig in detect_first_pullback(grp, symbol):
+            session_signals += 1
             row = grp.loc[grp["bar_ts_utc"] == sig.entry_ts]
             if row.empty:
                 continue
@@ -129,6 +247,18 @@ def run_backtest(
             )
         if session_passed:
             screen_stats["passed"] += 1
+        if session_signals == 0:
+            # Previously invisible: reject_reasons only recorded a reason
+            # inside the signal loop, so a session where the PATTERN never
+            # fired contributed nothing and looked identical to a session
+            # rejected on pillars. 116 of 140 sessions were dark this way.
+            # Attribute them so the funnel adds up:
+            #   sessions == passed + sum(session_outcomes.values())
+            screen_stats["no_signal_sessions"] += 1
+            reason = _no_signal_reason(grp, symbol)
+            screen_stats["no_signal_reasons"][reason] = (
+                screen_stats["no_signal_reasons"].get(reason, 0) + 1
+            )
 
     results = [t for t in trades if t is not None]
     summary = summarize(results)

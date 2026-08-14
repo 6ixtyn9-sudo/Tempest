@@ -20,7 +20,7 @@ Entry pattern — the first pullback, on 1-minute bars:
      of the course's Level-2 tape reading and are NOT simulated in v1.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -41,6 +41,21 @@ MAX_RETRACE = 0.50         # pullback may not retrace more than 50%
 HOLD_MINUTES = 15          # default exit horizon
 RR_TARGET = 2.0            # reward:risk target for the exit simulation
 
+# --- Minimum viable risk (a correctness rail, not a tuning knob) ----------
+# A squeeze only a few ticks wide yields stop = pullback_low one cent under
+# entry. Measured on live 1m data 2026-08-14, RRGB produced entry 9.725 /
+# stop 9.715: risk $0.0100 per share against a modelled round-trip cost of
+# $0.0972 (CostModel round_trip_bps=100). The stop sits INSIDE the spread,
+# so it is hit by the bid/ask rather than by price, and a "2R win" of $2.04
+# on a $992 position cannot cover the cost of the round trip.
+#
+# The floor is expressed as a fraction of entry price so it scales across
+# the $2-20 universe. 0.003 (0.3%) is deliberately below the 1.0%
+# round-trip cost: this rail exists to reject DEGENERATE geometry, not to
+# assert a profitable edge. Sizing/expectancy filtering is the trader's job
+# (see PaperTrader._min_risk_per_share, which is cost-aware).
+MIN_RISK_FRACTION = 0.003
+
 
 @dataclass
 class Pillars:
@@ -52,6 +67,7 @@ class Pillars:
     float_shares: Optional[float]
     passes: bool
     reasons: list
+    caveats: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -59,7 +75,7 @@ class Pillars:
             "total_volume": int(self.total_volume),
             "gap_open": round(self.gap_open, 4), "price": round(self.price, 2),
             "float_shares": self.float_shares, "passes": self.passes,
-            "reasons": self.reasons,
+            "reasons": self.reasons, "caveats": self.caveats,
         }
 
 
@@ -71,6 +87,7 @@ def screen_pillars(
     price: float,
     float_shares: Optional[float] = None,
     relax: bool = False,
+    require_float: bool = True,
 ) -> Pillars:
     """Evaluate the five pillars for one symbol on one session.
 
@@ -80,6 +97,7 @@ def screen_pillars(
     — the strict pillars remain the default.
     """
     reasons = []
+    caveats: list[str] = []
     relvol_min = 2.0 if relax else REL_VOL_MIN
     gap_min = 0.01 if relax else GAP_MIN
     if not np.isfinite(relvol) or relvol < relvol_min:
@@ -92,13 +110,22 @@ def screen_pillars(
         if not (PRICE_MIN <= price <= PRICE_MAX):
             reasons.append(f"price {price:.2f} outside [{PRICE_MIN},{PRICE_MAX}]")
         if float_shares is None or not np.isfinite(float_shares):
-            reasons.append("float missing")
+            # A missing float is MISSING DATA, not a failed pillar. Treating
+            # it as a reject silently vetoed the largest single block of
+            # backtest sessions (10 of 24 recorded rejections on 2026-08-14)
+            # while looking identical to a genuine supply-pillar failure.
+            # require_float=False downgrades it to a recorded caveat so the
+            # data gap is visible and separable in the report.
+            if require_float:
+                reasons.append("float missing")
+            else:
+                caveats.append("float missing (unverified supply pillar)")
         elif float_shares >= FLOAT_MAX:
             reasons.append(f"float {float_shares:,} >= {FLOAT_MAX:,}")
     return Pillars(
         symbol=symbol, relvol=relvol, total_volume=total_volume,
         gap_open=gap_open, price=price, float_shares=float_shares,
-        passes=len(reasons) == 0, reasons=reasons,
+        passes=len(reasons) == 0, reasons=reasons, caveats=caveats,
     )
 
 
@@ -130,6 +157,7 @@ def detect_first_pullback(
     squeeze_bars: int = SQUEEZE_BARS,
     max_retrace: float = MAX_RETRACE,
     rr_target: float = RR_TARGET,
+    min_risk_fraction: float = MIN_RISK_FRACTION,
 ) -> list[PullbackSignal]:
     """Detect first-pullback entries on a featured 1m frame (from
     features.compute_features). Returns one signal per qualifying pattern.
@@ -141,17 +169,24 @@ def detect_first_pullback(
         lower volume than the squeeze's green candles
       - entry = first candle whose high breaks the prior candle's high
       - stop = pullback low; target = entry + rr_target * (entry - stop)
+      - reject the signal if (entry - stop) < min_risk_fraction * entry,
+        i.e. the stop is so tight it is inside the spread
     """
     if df is None or df.empty or "vwap" not in df.columns:
         return []
     signals: list[PullbackSignal] = []
     for _, grp in df.groupby("session", sort=True):
         grp = grp.sort_values("bar_ts_utc").reset_index(drop=True)
-        signals.extend(_detect_session(grp, symbol, squeeze_bars, max_retrace, rr_target))
+        signals.extend(_detect_session(
+            grp, symbol, squeeze_bars, max_retrace, rr_target, min_risk_fraction,
+        ))
     return signals
 
 
-def _detect_session(grp, symbol, squeeze_bars, max_retrace, rr_target):
+def _detect_session(
+    grp, symbol, squeeze_bars, max_retrace, rr_target,
+    min_risk_fraction=MIN_RISK_FRACTION,
+):
     out = []
     o = grp["open"].values
     close = grp["close"].values
@@ -213,7 +248,9 @@ def _detect_session(grp, symbol, squeeze_bars, max_retrace, rr_target):
                 entry_price = max(float(high[k - 1]), float(o[k]))
                 stop_price = pb_low
                 risk = entry_price - stop_price
-                if risk <= 0:
+                # Reject non-positive AND degenerate risk. A stop a tick or
+                # two below entry is not a stop, it is spread noise.
+                if risk <= 0 or risk < min_risk_fraction * entry_price:
                     i = k + 1
                     break
                 target_price = entry_price + rr_target * risk

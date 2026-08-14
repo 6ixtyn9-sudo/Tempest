@@ -30,6 +30,7 @@ from tempest.risk import (
     record_cooldown,
 )
 from tempest.strategy import detect_first_pullback
+from tempest.validation import CostModel
 
 
 def _authoritative_clock(broker) -> dict:
@@ -197,6 +198,36 @@ class PaperTrader:
         sig.last_price = float(today["close"].iloc[-1])
         return sig
 
+    def _min_risk_bps(self) -> float:
+        """Minimum stop distance in bps of entry: the break-even rail.
+
+        Derivation, not a preference. The strategy exits at a 2R target, so
+        a winning trade grosses 2 * risk. It is only worth taking if that
+        clears the modelled round trip:
+
+            2 * risk_bps - round_trip_bps > 0
+            risk_bps > round_trip_bps / 2          (= 50 bps by default)
+
+        Below this line a trade cannot make money even when it WINS, which
+        is a correctness failure rather than a bad setup. Measured example
+        (live 1m bars, 2026-08-14): RRGB entry 9.725 / stop 9.715 = 10.3 bps
+        of risk; a 2R "win" grosses 20.6 bps against 100 bps of cost.
+
+        This is deliberately the mathematical floor and NOT a profitability
+        filter -- a setup at 55 bps clears it by a hair. Raising it is a
+        research decision: set TEMPEST_MIN_RISK_BPS (e.g. 150) to demand
+        real margin once you have win-rate evidence to justify the level.
+        """
+        import os
+        default = 0.5 * CostModel().round_trip_bps()
+        try:
+            return max(0.0, float(os.getenv("TEMPEST_MIN_RISK_BPS", str(default))))
+        except ValueError:
+            return default
+
+    def _min_risk_per_share(self, price: float) -> float:
+        return price * self._min_risk_bps() / 10000.0
+
     def _entry_qty(self, price: float, stop_price: float) -> int:
         risk_per_share = price - stop_price
         if price <= 0 or risk_per_share <= 0:
@@ -228,6 +259,19 @@ class PaperTrader:
         risk = fill - sig.stop_price
         if risk <= 0:
             return {"symbol": symbol, "action": "blocked", "reason": "non-positive risk"}
+        # Economic rail: a stop inside the round-trip cost cannot win even
+        # when the 2R target is hit. Blocked, not "watching" -- the setup is
+        # structurally untradeable rather than merely not-yet-triggered.
+        min_risk = self._min_risk_per_share(fill)
+        if risk < min_risk:
+            return {
+                "symbol": symbol, "action": "blocked",
+                "reason": (
+                    f"risk {risk:.4f}/sh ({10000 * risk / fill:.0f}bps) below "
+                    f"cost floor {min_risk:.4f} ({self._min_risk_bps():.0f}bps) "
+                    f"- stop is inside the spread"
+                ),
+            }
         qty = self._entry_qty(fill, sig.stop_price)
         if qty < 1:
             return {"symbol": symbol, "action": "blocked",
