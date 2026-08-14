@@ -154,3 +154,12 @@ timestamp_utc,stage,detail
 2026-08-14T15:00:39.847430+00:00,entry_blocked,LBGJ: entry window closed: after 11:00 ET
 2026-08-14T15:00:39.848926+00:00,entry_blocked,MF: entry window closed: after 11:00 ET
 2026-08-14T15:00:39.850506+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
+2026-08-14T15:05:27.918653+00:00,client_ok,Gale paper client constructed
+2026-08-14T15:05:27.924124+00:00,skip_extreme,HHS: relvol=157.5 > 50.0
+2026-08-14T15:05:27.926546+00:00,skip_extreme,CGTL: relvol=122.3 > 50.0
+2026-08-14T15:05:28.018720+00:00,equity,100000.00
+2026-08-14T15:05:28.285688+00:00,pass_done,open=0 slots=0 exits=0 entries=blocked=4
+2026-08-14T15:05:28.288434+00:00,entry_blocked,AKAN: entry window closed: after 11:00 ET
+2026-08-14T15:05:28.290617+00:00,entry_blocked,LBGJ: entry window closed: after 11:00 ET
+2026-08-14T15:05:28.292815+00:00,entry_blocked,MF: entry window closed: after 11:00 ET
+2026-08-14T15:05:28.295003+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
