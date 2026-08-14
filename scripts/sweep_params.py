@@ -140,6 +140,21 @@ def trades_for(frames, squeeze_bars, min_risk_fraction, hold_bars):
     return np.array(nets)
 
 
+def breakeven_win_rate(min_risk_fraction, rr_target=2.0):
+    """Win rate a config needs just to break even.
+
+    With reward:risk R, risk r (fraction of entry) and round-trip cost c:
+        p(R*r - c) + (1-p)(-r - c) = 0
+        p = (r + c) / (r * (1 + R))
+    Returns None when r <= 0 (no floor: risk is unbounded below, so no
+    single breakeven exists).
+    """
+    if min_risk_fraction <= 0:
+        return None
+    c = COST.round_trip_bps() / 10000.0
+    return (min_risk_fraction + c) / (min_risk_fraction * (1.0 + rr_target))
+
+
 def bootstrap_ci(sample, rng, iters=20000):
     if len(sample) == 0:
         return (np.nan, np.nan, np.nan)
@@ -171,7 +186,12 @@ def main() -> int:
                         help="fetch 8 days from yfinance for --symbols")
     p.add_argument("--symbols", nargs="+", default=[])
     p.add_argument("--squeeze-bars", nargs="+", type=int, default=[2, 3, 4])
-    p.add_argument("--min-risk", nargs="+", type=float, default=[0.0, 0.003, 0.005])
+    # Default grid spans the range where a 2R target is REACHABLE at the
+    # modelled cost. The original grid (0, 0.003, 0.005) tested only values
+    # needing a 144%/100% win rate -- it could not have found a profitable
+    # setting even if one existed. See breakeven_win_rate().
+    p.add_argument("--min-risk", nargs="+", type=float,
+                   default=[0.003, 0.005, 0.01, 0.015, 0.02, 0.03, 0.05])
     p.add_argument("--hold-bars", type=int, default=15)
     p.add_argument("--min-n", type=int, default=30,
                    help="minimum trades before a config may be acted on")
@@ -189,20 +209,33 @@ def main() -> int:
           f"MIN_RISK_FRACTION={INCUMBENT[1]}")
     print(f"cost model: {COST.round_trip_bps():.0f} bps round trip\n")
 
+    reachable = [m for m in args.min_risk
+                 if (b := breakeven_win_rate(m)) is not None and b <= 1.0]
+    if not reachable:
+        print("WARNING: every --min-risk value in this grid needs a breakeven")
+        print("win rate above 100%. No setting here can be profitable, so the")
+        print("sweep cannot find one. Widen the grid (e.g. --min-risk 0.01")
+        print("0.02 0.03) or lower the modelled cost.\n")
+
     rng = np.random.default_rng(args.seed)
     results = {}
     for sq, mrf in itertools.product(args.squeeze_bars, args.min_risk):
         results[(sq, mrf)] = trades_for(frames, sq, mrf, args.hold_bars)
 
     header = (f"{'sq':>3}{'min_risk':>10}{'n':>6}{'win%':>7}"
-              f"{'mean net%':>11}{'95% CI':>20}{'P(>0)':>8}")
+              f"{'mean net%':>11}{'95% CI':>20}{'P(>0)':>8}{'need win%':>11}")
     print(header)
     print("-" * len(header))
     rows = []
     for (sq, mrf), nets in sorted(results.items()):
+        be = breakeven_win_rate(mrf)
+        be_txt = "n/a" if be is None else (
+            "IMPOSSIBLE" if be > 1.0 else f"{100 * be:.1f}%")
         if len(nets) == 0:
-            print(f"{sq:>3}{mrf:>10.3f}{0:>6}{'-':>7}{'-':>11}{'-':>20}{'-':>8}")
-            rows.append({"squeeze_bars": sq, "min_risk_fraction": mrf, "n": 0})
+            print(f"{sq:>3}{mrf:>10.3f}{0:>6}{'-':>7}{'-':>11}{'-':>20}"
+                  f"{'-':>8}{be_txt:>11}")
+            rows.append({"squeeze_bars": sq, "min_risk_fraction": mrf, "n": 0,
+                         "breakeven_win_rate": be})
             continue
         lo, hi, pgt = bootstrap_ci(nets, rng)
         win = 100.0 * (nets > 0).mean()
@@ -211,12 +244,14 @@ def main() -> int:
             marker += "  ** PROVEN NEGATIVE **"
         print(f"{sq:>3}{mrf:>10.3f}{len(nets):>6}{win:>7.1f}"
               f"{100 * nets.mean():>11.3f}"
-              f"   [{100 * lo:>6.2f},{100 * hi:>6.2f}]{pgt:>8.1%}{marker}")
+              f"   [{100 * lo:>6.2f},{100 * hi:>6.2f}]{pgt:>8.1%}"
+              f"{be_txt:>11}{marker}")
         rows.append({
             "squeeze_bars": sq, "min_risk_fraction": mrf, "n": int(len(nets)),
             "win_pct": win, "mean_net_pct": 100 * float(nets.mean()),
             "ci95_low_pct": 100 * float(lo), "ci95_high_pct": 100 * float(hi),
             "p_mean_positive": float(pgt),
+            "breakeven_win_rate": None if be is None else float(be),
         })
 
     base = results.get(INCUMBENT, np.array([]))
