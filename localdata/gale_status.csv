@@ -1,8 +1,4 @@
 timestamp_utc,stage,detail
-2026-08-14T13:35:34.924355+00:00,client_ok,Gale paper client constructed
-2026-08-14T13:35:34.928405+00:00,skip_extreme,FGI: relvol=789.8 > 50.0
-2026-08-14T13:35:34.930817+00:00,skip_extreme,FRGT: relvol=131.5 > 50.0
-2026-08-14T13:35:34.932791+00:00,skip_extreme,DFSC: relvol=2377.4 > 50.0
 2026-08-14T13:35:35.171295+00:00,equity,100000.00
 2026-08-14T13:35:36.877403+00:00,pass_done,open=0 slots=0 exits=0 entries=watching=3
 2026-08-14T13:35:36.880100+00:00,entry_watching,AIRO: no fresh ORB5 signal
@@ -244,3 +240,12 @@ timestamp_utc,stage,detail
 2026-08-14T15:50:29.593998+00:00,entry_blocked,LBGJ: entry window closed: after 11:00 ET
 2026-08-14T15:50:29.596379+00:00,entry_blocked,MF: entry window closed: after 11:00 ET
 2026-08-14T15:50:29.598668+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
+2026-08-14T15:55:26.873037+00:00,client_ok,Gale paper client constructed
+2026-08-14T15:55:26.878374+00:00,skip_extreme,HHS: relvol=172.8 > 50.0
+2026-08-14T15:55:26.881061+00:00,skip_extreme,CGTL: relvol=130.1 > 50.0
+2026-08-14T15:55:26.950625+00:00,equity,100000.00
+2026-08-14T15:55:27.235270+00:00,pass_done,open=0 slots=0 exits=0 entries=blocked=4
+2026-08-14T15:55:27.238020+00:00,entry_blocked,AKAN: entry window closed: after 11:00 ET
+2026-08-14T15:55:27.240526+00:00,entry_blocked,LBGJ: entry window closed: after 11:00 ET
+2026-08-14T15:55:27.242903+00:00,entry_blocked,MF: entry window closed: after 11:00 ET
+2026-08-14T15:55:27.245248+00:00,entry_blocked,WETO: entry window closed: after 11:00 ET
