@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from tempest.config import WAREHOUSE_DIR  # noqa: E402
 from tempest.features import compute_features  # noqa: E402
+from tempest.gale import detect_gale_orb  # noqa: E402
 from tempest.strategy import (  # noqa: E402
     MIN_RISK_FRACTION,
     SQUEEZE_BARS,
@@ -56,7 +57,7 @@ MIN_N_FOR_CI = 10
 INCUMBENT = (SQUEEZE_BARS, MIN_RISK_FRACTION)
 
 
-def simulate(sig, grp, hold_bars=15):
+def simulate(sig, grp, hold_bars=15, rr_target=None):
     """Walk forward from the bar AFTER the signal: stop, target, or horizon.
 
     Conservative within a bar: if both the stop and the target are touched,
@@ -70,10 +71,11 @@ def simulate(sig, grp, hold_bars=15):
     forward = grp.iloc[start:start + hold_bars]
     if forward.empty:
         return None
-    entry, stop, target = sig.entry_price, sig.stop_price, sig.target_price
+    entry, stop = float(sig.entry_price), float(sig.stop_price)
     risk = entry - stop
     if risk <= 0:
         return None
+    target = (entry + rr_target * risk) if rr_target else float(sig.target_price)
     for _, bar in forward.iterrows():
         if bar["low"] <= stop:
             return _result((stop - entry) / entry, risk, entry, "stop")
@@ -130,17 +132,35 @@ def load_frames(args):
     return frames
 
 
-def trades_for(frames, squeeze_bars, min_risk_fraction, hold_bars):
+def _gale_signals(feat, sym, min_risk_fraction):
+    """Gale exposes no risk-floor argument, so filter its signals here to
+    keep the two strategies comparable under the same economic rail."""
+    out = []
+    for sig in detect_gale_orb(feat, sym):
+        entry, stop = float(sig.entry_price), float(sig.stop_price)
+        if entry <= 0 or entry - stop <= 0:
+            continue
+        if (entry - stop) < min_risk_fraction * entry:
+            continue
+        out.append(sig)
+    return out
+
+
+def trades_for(frames, squeeze_bars, min_risk_fraction, hold_bars,
+               strategy="tempest", rr_target=2.0):
     nets = []
     for sym, feat in frames.items():
-        signals = detect_first_pullback(
-            feat, sym, squeeze_bars=squeeze_bars,
-            min_risk_fraction=min_risk_fraction,
-        )
+        if strategy == "gale":
+            signals = _gale_signals(feat, sym, min_risk_fraction)
+        else:
+            signals = detect_first_pullback(
+                feat, sym, squeeze_bars=squeeze_bars,
+                min_risk_fraction=min_risk_fraction, rr_target=rr_target,
+            )
         for sig in signals:
             grp = (feat[feat["session"] == sig.session]
                    .sort_values("bar_ts_utc").reset_index(drop=True))
-            res = simulate(sig, grp, hold_bars)
+            res = simulate(sig, grp, hold_bars, rr_target)
             if res:
                 nets.append(res["net"])
     return np.array(nets)
@@ -201,6 +221,10 @@ def main() -> int:
     p.add_argument("--hold-bars", type=int, default=15)
     p.add_argument("--min-n", type=int, default=30,
                    help="minimum trades before a config may be acted on")
+    p.add_argument("--strategy", choices=["tempest", "gale"], default="tempest",
+                   help="which signal generator to sweep")
+    p.add_argument("--rr-target", nargs="+", type=float, default=[2.0],
+                   help="reward:risk multiples to test")
     p.add_argument("--seed", type=int, default=20260814)
     p.add_argument("--json", type=Path)
     args = p.parse_args()
@@ -211,6 +235,7 @@ def main() -> int:
         return 1
     sessions = sum(f["session"].nunique() for f in frames.values())
     print(f"universe: {len(frames)} symbols, {sessions} sessions")
+    print(f"strategy: {args.strategy}   rr_target={args.rr_target[0]}")
     print(f"incumbent: SQUEEZE_BARS={INCUMBENT[0]} "
           f"MIN_RISK_FRACTION={INCUMBENT[1]}")
     print(f"cost model: {COST.round_trip_bps():.0f} bps round trip\n")
@@ -225,8 +250,12 @@ def main() -> int:
 
     rng = np.random.default_rng(args.seed)
     results = {}
-    for sq, mrf in itertools.product(args.squeeze_bars, args.min_risk):
-        results[(sq, mrf)] = trades_for(frames, sq, mrf, args.hold_bars)
+    squeeze_grid = args.squeeze_bars if args.strategy == "tempest" else [0]
+    for sq, mrf in itertools.product(squeeze_grid, args.min_risk):
+        results[(sq, mrf)] = trades_for(
+            frames, sq, mrf, args.hold_bars,
+            strategy=args.strategy, rr_target=args.rr_target[0],
+        )
 
     header = (f"{'sq':>3}{'min_risk':>10}{'n':>6}{'win%':>7}"
               f"{'mean net%':>11}{'95% CI':>20}{'P(>0)':>8}{'need win%':>11}")
