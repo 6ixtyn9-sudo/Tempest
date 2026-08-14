@@ -1,18 +1,4 @@
 timestamp_utc,stage,detail
-2026-08-14T14:50:31.355461+00:00,skip_watching,WETO: no fresh first-pullback signal
-2026-08-14T14:55:29.671467+00:00,client_ok,paper trading client constructed
-2026-08-14T14:55:29.671678+00:00,skip_extreme,HHS: relvol=157.5 > 50.0
-2026-08-14T14:55:29.671742+00:00,skip_extreme,CGTL: relvol=122.3 > 50.0
-2026-08-14T14:55:29.869842+00:00,equity,100000.00
-2026-08-14T14:55:31.407153+00:00,pass_done,open=0 slots=0 exits=0 entries=watching=4
-2026-08-14T14:55:31.407259+00:00,skip_watching,AKAN: no fresh first-pullback signal
-2026-08-14T14:55:31.407317+00:00,skip_watching,LBGJ: no fresh first-pullback signal
-2026-08-14T14:55:31.407367+00:00,skip_watching,MF: no fresh first-pullback signal
-2026-08-14T14:55:31.407413+00:00,skip_watching,WETO: no fresh first-pullback signal
-2026-08-14T15:00:35.270564+00:00,client_ok,paper trading client constructed
-2026-08-14T15:00:35.270781+00:00,skip_extreme,HHS: relvol=157.5 > 50.0
-2026-08-14T15:00:35.270845+00:00,skip_extreme,CGTL: relvol=122.3 > 50.0
-2026-08-14T15:00:35.727461+00:00,equity,100000.00
 2026-08-14T15:00:37.624633+00:00,pass_done,open=0 slots=0 exits=0 entries=watching=4
 2026-08-14T15:00:37.624729+00:00,skip_watching,AKAN: no fresh first-pullback signal
 2026-08-14T15:00:37.624784+00:00,skip_watching,LBGJ: no fresh first-pullback signal
@@ -249,3 +235,17 @@ timestamp_utc,stage,detail
 2026-08-14T17:00:29.309115+00:00,skip_watching,MF: no fresh first-pullback signal
 2026-08-14T17:00:29.309195+00:00,skip_watching,NMAX: no fresh first-pullback signal
 2026-08-14T17:00:29.309239+00:00,skip_watching,WETO: no fresh first-pullback signal
+2026-08-14T17:05:26.235069+00:00,client_ok,paper trading client constructed
+2026-08-14T17:05:26.235383+00:00,skip_extreme,CGTL: relvol=132.8 > 50.0
+2026-08-14T17:05:26.235468+00:00,skip_extreme,HHS: relvol=184.1 > 50.0
+2026-08-14T17:05:30.437234+00:00,equity,100000.00
+2026-08-14T17:05:31.472590+00:00,pass_done,open=0 slots=0 exits=0 entries=watching=9
+2026-08-14T17:05:31.472717+00:00,skip_watching,AKAN: no fresh first-pullback signal
+2026-08-14T17:05:31.472788+00:00,skip_watching,CAPR: no fresh first-pullback signal
+2026-08-14T17:05:31.472850+00:00,skip_watching,EMAT: no fresh first-pullback signal
+2026-08-14T17:05:31.472908+00:00,skip_watching,GRSD: no fresh first-pullback signal
+2026-08-14T17:05:31.472965+00:00,skip_watching,IMXI: no fresh first-pullback signal
+2026-08-14T17:05:31.473020+00:00,skip_watching,LBGJ: no fresh first-pullback signal
+2026-08-14T17:05:31.473075+00:00,skip_watching,MF: no fresh first-pullback signal
+2026-08-14T17:05:31.473129+00:00,skip_watching,NMAX: no fresh first-pullback signal
+2026-08-14T17:05:31.473184+00:00,skip_watching,WETO: no fresh first-pullback signal
