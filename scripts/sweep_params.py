@@ -326,10 +326,20 @@ def main() -> int:
         if len(incumbent_nets):
             ilo, ihi, _ = bootstrap_ci(incumbent_nets, rng)
             if ihi < 0:
-                print("\n  The INCUMBENT is among them. Tuning cannot fix this:")
-                print("  the edge is absent at every setting tested, so the")
-                print("  problem is the strategy or the cost model, not the")
-                print("  parameters. Do not deploy real capital on this.")
+                print("\n  The INCUMBENT is among them: the setting currently")
+                print("  running in paper is a demonstrated loser.")
+                # Scope the claim to the band that is actually proven. Saying
+                # "every setting" was true of the original narrow grid and is
+                # FALSE once the reachable range is swept -- several wider-stop
+                # configs show positive means (unproven, but not disproven).
+                neg_floors = sorted({m for (_, m), _ in proven_negative})
+                if neg_floors:
+                    print(f"  Proven-negative band: min_risk <= "
+                          f"{max(neg_floors):.3f}. Wider floors are NOT")
+                    print("  disproven -- several show positive means that do")
+                    print("  not yet reach significance. That is 'unmeasured',")
+                    print("  not 'profitable'.")
+                print("  Do not deploy real capital at a proven-negative floor.")
         print("\n  Breakeven check: with a 2R target and a round trip of "
               f"{COST.round_trip_bps():.0f} bps,")
         print("  a stop of size r needs win rate (r + c) / 3r. At r = 0.3% that")
