@@ -33,7 +33,12 @@ TOTAL_VOL_MIN = 1_000_000  # total shares traded (session running total)
 GAP_MIN = 0.02             # open vs prior close >= +2%
 PRICE_MIN = 2.0
 PRICE_MAX = 20.0
-FLOAT_MAX = 20_000_000     # shares outstanding (supply pillar)
+# Raised 20M -> 100M on 2026-08-14 (breadth decision; see
+# sources/tradingview.py FLOAT_MAX_DEFAULT for the measurement and the
+# comparability caveat). These two constants MUST agree: the scanner
+# selects the universe and screen_pillars re-validates it, so a mismatch
+# silently rejects everything the scan just admitted.
+FLOAT_MAX = 100_000_000    # shares outstanding (supply pillar)
 
 # --- Pattern parameters (fixed priors, tunable later only with evidence) --
 SQUEEZE_BARS = 3           # consecutive green candles

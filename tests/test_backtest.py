@@ -42,8 +42,9 @@ def test_run_backtest_produces_trades_and_buckets(tmp_path):
 def test_backtest_applies_float_pillar_from_screen_log(tmp_path):
     from tempest.backtest import run_backtest
     df = _pad_to_sessions(squeeze_pullback_break_frame())
-    # Same frame: with a 50M float the session must not produce trades.
-    rep = run_backtest(df, "YXT", float_map={"YXT": 50_000_000})
+    # Same frame: an oversized float must not produce trades. The pillar
+    # ceiling was raised 20M -> 100M on 2026-08-14, so this uses 150M.
+    rep = run_backtest(df, "YXT", float_map={"YXT": 150_000_000})
     assert rep["n_trades"] == 0
     # Unknown float fails the strict five-pillar screen.
     rep2 = run_backtest(df, "YXT", float_map={})

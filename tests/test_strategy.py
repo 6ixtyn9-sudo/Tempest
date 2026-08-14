@@ -26,7 +26,8 @@ def test_screen_pillars_fail_each():
         dict(relvol=14.0, total_volume=500_000, gap_open=0.08, price=8.0, float_shares=2_870_000),
         dict(relvol=14.0, total_volume=44_000_000, gap_open=0.01, price=8.0, float_shares=2_870_000),
         dict(relvol=14.0, total_volume=44_000_000, gap_open=0.08, price=25.0, float_shares=2_870_000),
-        dict(relvol=14.0, total_volume=44_000_000, gap_open=0.08, price=8.0, float_shares=50_000_000),
+        # float pillar raised to 100M on 2026-08-14; 150M still fails it
+        dict(relvol=14.0, total_volume=44_000_000, gap_open=0.08, price=8.0, float_shares=150_000_000),
         dict(relvol=14.0, total_volume=44_000_000, gap_open=0.08, price=8.0),
     ]
     for kw in cases:

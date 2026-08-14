@@ -20,7 +20,7 @@ def test_build_filter_matches_pillars():
     assert rights["close"]["right"] == [2.0, 20.0]
     assert rights["gap"]["right"] == 2.0
     assert rights["relative_volume_10d_calc"]["right"] == 5.0
-    assert rights["float_shares_outstanding"]["right"] == 20_000_000
+    assert rights["float_shares_outstanding"]["right"] == 100_000_000
     assert rights["volume"]["right"] == 1_000_000
 
 

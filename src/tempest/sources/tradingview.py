@@ -47,12 +47,30 @@ _COLUMNS = [
 ]
 
 
+# Supply pillar. The course prior is 20M, on the theory that a small float
+# squeezes harder. Raised to 100M on 2026-08-14 as a deliberate BREADTH
+# decision, not a tuning change.
+#
+# Measured that day, float was the ONLY binding pillar: relaxing relvol
+# (5 -> 3 -> 2) or gap (2% -> 1%) changed the match count not at all, while
+# float moved it 6 -> 8 (50M) -> 10 (100M). The screen returns every match
+# (no row cap), so the universe was small because of this one threshold.
+#
+# The cost is explicit: the four names this admits (GRSD 20.5M, IMXI 28.2M,
+# EMAT 52.2M, CAPR 52.3M) are 15-100x the float of the six that already
+# qualified (0.5M-3.9M). They are a DIFFERENT population, so evidence
+# gathered after this change is not comparable to the 792-session warehouse
+# built under the 20M rule. Analyse the two eras separately -- scripts that
+# pool them will silently mix populations.
+FLOAT_MAX_DEFAULT = 100_000_000
+
+
 def build_filter(
     price_min: float = 2.0,
     price_max: float = 20.0,
     gap_min_pct: float = 2.0,
     relvol_min: float = 5.0,
-    float_max: float = 20_000_000,
+    float_max: float = FLOAT_MAX_DEFAULT,
     volume_min: float = 1_000_000,
 ) -> list[dict]:
     """The five-pillar screen as a TradingView filter payload."""

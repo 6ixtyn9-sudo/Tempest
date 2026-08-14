@@ -183,7 +183,7 @@ class TestFloatPolicy:
         """Downgrading MISSING data must not weaken a real pillar failure."""
         pillars = screen_pillars(
             "X", relvol=8.0, total_volume=2e6, gap_open=0.05,
-            price=5.0, float_shares=50_000_000, require_float=False,
+            price=5.0, float_shares=150_000_000, require_float=False,
         )
         assert not pillars.passes
         assert any("float" in r for r in pillars.reasons)
