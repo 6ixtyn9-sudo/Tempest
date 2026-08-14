@@ -1,13 +1,4 @@
 timestamp_utc,stage,detail
-2026-08-13T20:00:31.764072+00:00,equity,100000.00
-2026-08-13T20:00:32.171817+00:00,pass_done,open=0 slots=0 exits=0 entries=blocked=3
-2026-08-13T20:00:32.171923+00:00,skip_blocked,AIRO: entry window closed: inside final 30m
-2026-08-13T20:00:32.171992+00:00,skip_blocked,LNSR: entry window closed: inside final 30m
-2026-08-13T20:00:32.172077+00:00,skip_blocked,RRGB: entry window closed: inside final 30m
-2026-08-14T13:31:22.258704+00:00,client_ok,paper trading client constructed
-2026-08-14T13:31:22.259000+00:00,skip_extreme,FGI: relvol=789.8 > 50.0
-2026-08-14T13:31:22.259085+00:00,skip_extreme,FRGT: relvol=131.5 > 50.0
-2026-08-14T13:31:22.259157+00:00,skip_extreme,DFSC: relvol=2377.4 > 50.0
 2026-08-14T13:31:22.317743+00:00,equity,100000.00
 2026-08-14T13:31:22.699032+00:00,pass_done,open=0 slots=0 exits=0 entries=watching=3
 2026-08-14T13:31:22.699177+00:00,skip_watching,AIRO: no fresh first-pullback signal
@@ -249,3 +240,12 @@ timestamp_utc,stage,detail
 2026-08-14T15:45:31.087245+00:00,skip_watching,LBGJ: no fresh first-pullback signal
 2026-08-14T15:45:31.087326+00:00,skip_watching,MF: no fresh first-pullback signal
 2026-08-14T15:45:31.087403+00:00,skip_watching,WETO: no fresh first-pullback signal
+2026-08-14T15:50:28.145107+00:00,client_ok,paper trading client constructed
+2026-08-14T15:50:28.145386+00:00,skip_extreme,HHS: relvol=172.8 > 50.0
+2026-08-14T15:50:28.145467+00:00,skip_extreme,CGTL: relvol=130.1 > 50.0
+2026-08-14T15:50:28.193796+00:00,equity,100000.00
+2026-08-14T15:50:28.645946+00:00,pass_done,open=0 slots=0 exits=0 entries=watching=4
+2026-08-14T15:50:28.646096+00:00,skip_watching,AKAN: no fresh first-pullback signal
+2026-08-14T15:50:28.646171+00:00,skip_watching,LBGJ: no fresh first-pullback signal
+2026-08-14T15:50:28.646235+00:00,skip_watching,MF: no fresh first-pullback signal
+2026-08-14T15:50:28.646328+00:00,skip_watching,WETO: no fresh first-pullback signal
