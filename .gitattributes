@@ -1,0 +1,7 @@
+# Append-only evidence CSVs: two concurrent workflow runs (a capture and a
+# poll) each append their own rows to the same file. A default 3-way merge
+# treats "both sides added different lines at EOF" as a conflict and the
+# rebase in commit_evidence.sh dies. `merge=union` is a git built-in that
+# keeps BOTH sides' lines instead of conflicting -- exactly right for an
+# append-only log. commit_evidence.sh then de-duplicates and re-sorts.
+localdata/*.csv merge=union
