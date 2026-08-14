@@ -79,6 +79,17 @@ jobs:
           # aim the sensor. Expect far fewer fills (backtest n fell
           # 111 -> 15 across this range). Remove to revert to 50 bps.
           TEMPEST_MIN_RISK_BPS: "200"
+          # Exit probe (2026-08-14). At a 2% floor the 90-day exit mix
+          # was 6 targets / 3 stops: two thirds of trades hit exactly 2R
+          # and stopped, the signature of a truncating target. Sweeping
+          # RR at constant 66.7% win rate gave 2.0 -> +4.37%/trade and
+          # 3.0 -> +7.88%; win rate only degraded at 4.0. UNPROVEN
+          # (n=9, nested, CI spans zero) -- this gathers out-of-sample
+          # evidence. Unlike every other knob, RR does NOT reduce trade
+          # count: it moves the exit, not the entry gate.
+          # NOT applied to Gale: its best trade ever reached 1.34R, so a
+          # target at 1.5R+ is unreachable and RR is not a lever there.
+          TEMPEST_RR_TARGET: "3.0"
         run: |
           if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
             echo "Alpaca secrets not set - skipping paper trade."

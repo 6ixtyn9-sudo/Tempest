@@ -198,6 +198,32 @@ class PaperTrader:
         sig.last_price = float(today["close"].iloc[-1])
         return sig
 
+    def _rr_target(self) -> float:
+        """Reward:risk multiple for the take-profit leg.
+
+        Default 2.0 (the course prior). Measured 2026-08-14 on the 90-day
+        warehouse at a 2% stop floor: the exit mix was 6 targets / 3 stops,
+        i.e. two thirds of trades hit exactly 2R and stopped there, which is
+        the signature of a target that truncates its winners. Sweeping RR at
+        constant win rate:
+
+            RR 1.5 -> +2.62%/trade    RR 3.0 -> +7.88%/trade
+            RR 2.0 -> +4.37%/trade    RR 4.0 -> +9.28% (win% falls 67->56)
+
+        Win rate holds at 66.7% through 3.0 and only degrades at 4.0, so 3.0
+        is the point where more upside is captured without paying for it in
+        hit rate. UNPROVEN: n=9, nested data, CI [-0.09, 17.43] spans zero.
+
+        RR is the only lever here that does not reduce trade count -- it
+        changes where the exit sits, not whether the entry qualifies. That
+        is why it is worth probing live. Override: TEMPEST_RR_TARGET.
+        """
+        import os
+        try:
+            return max(0.1, float(os.getenv("TEMPEST_RR_TARGET", "2.0")))
+        except ValueError:
+            return 2.0
+
     def _min_risk_bps(self) -> float:
         """Minimum stop distance in bps of entry: the break-even rail.
 
@@ -282,7 +308,7 @@ class PaperTrader:
         )
         if not ok:
             return {"symbol": symbol, "action": "blocked", "reason": "; ".join(reasons)}
-        target = fill + 2.0 * risk
+        target = fill + self._rr_target() * risk
         cid = f"{self.order_prefix}-{symbol.upper()}-{uuid.uuid4().hex[:8]}"
         row = {
             "timestamp_utc": self._now().isoformat(),
