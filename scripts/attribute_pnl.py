@@ -57,6 +57,20 @@ def attribute(journal) -> dict:
     return out
 
 
+def attribute_by_strategy(journal) -> dict:
+    """FIFO attribution separated by strategy_id and symbol."""
+    if journal is None or journal.empty:
+        return {}
+    frame = journal.copy()
+    if "strategy_id" not in frame.columns:
+        frame["strategy_id"] = "legacy_unknown"
+    frame["strategy_id"] = frame["strategy_id"].fillna("legacy_unknown").astype(str)
+    return {
+        strategy: attribute(group)
+        for strategy, group in frame.groupby("strategy_id")
+    }
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--json", action="store_true")
@@ -66,17 +80,21 @@ def main() -> int:
     if journal.empty:
         print("No trades journaled yet.")
         return 0
-    att = attribute(journal)
+    att = attribute_by_strategy(journal)
     if args.json:
         import json
         print(json.dumps(att, indent=2))
         return 0
-    print(f"{'SYMBOL':8} {'realized':>10} {'trades':>6} {'win%':>6} {'open':>6}")
+    print(f"{'STRATEGY':24} {'SYMBOL':8} {'realized':>10} {'trades':>6} {'win%':>6} {'open':>6}")
     total = 0.0
-    for sym, a in sorted(att.items()):
-        wr = f"{a['win_rate']*100:.0f}%" if a["win_rate"] is not None else "  - "
-        print(f"{sym:8} {a['realized_pnl']:>10.2f} {a['closed_trades']:>6} {wr:>6} {a['open_qty']:>6.0f}")
-        total += a["realized_pnl"]
+    for strategy, symbols in sorted(att.items()):
+        for sym, a in sorted(symbols.items()):
+            wr = f"{a['win_rate']*100:.0f}%" if a["win_rate"] is not None else "  - "
+            print(
+                f"{strategy:24} {sym:8} {a['realized_pnl']:>10.2f} "
+                f"{a['closed_trades']:>6} {wr:>6} {a['open_qty']:>6.0f}"
+            )
+            total += a["realized_pnl"]
     print(f"\nTotal realized: ${total:.2f}")
     print(f"Today realized: ${today_realized_pnl():.2f}")
     return 0

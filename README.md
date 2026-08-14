@@ -90,16 +90,19 @@ Safeguards (non-negotiable):
 
 Run locally:
 ```
-PYTHONPATH=src python3 scripts/paper_trade.py --dry-run   # what it would do
-PYTHONPATH=src python3 scripts/paper_trade.py              # place on paper
-PYTHONPATH=src python3 scripts/attribute_pnl.py            # realized P&L
+PYTHONPATH=src python3 scripts/paper_trade.py --dry-run       # Tempest preview
+PYTHONPATH=src python3 scripts/paper_trade.py                  # Tempest PAPER
+PYTHONPATH=src python3 scripts/gale_paper_trade.py --dry-run  # Gale preview
+PYTHONPATH=src python3 scripts/gale_paper_trade.py             # Gale PAPER
+PYTHONPATH=src python3 scripts/attribute_pnl.py                # by-strategy P&L
 ```
 
-## Gale ORB5 shadow lane
+## Gale ORB5 paper lane
 
 Gale is a second, isolated hypothesis in the same repository: a confirmed
 five-minute opening-range breakout on the same timestamped mover universe.
-It is **shadow-only** and has no broker import or order path.
+It executes on the same Alpaca **PAPER** account through Tempest's hardened
+broker lifecycle and global account-risk rails; it has no live-money mode.
 
 Fixed rules:
 - complete 09:30-09:34 ET opening range; entries 09:35-11:00 ET
@@ -108,19 +111,21 @@ Fixed rules:
 - maximum 0.5% chase and maximum 5% opening-range width
 - range-low stop, 2R target, 15-bar horizon
 
-The paper poll runs Gale after Tempest with `continue-on-error: true`, so shadow
-research cannot interrupt Tempest execution. Evidence is separate:
+The paper poll runs Tempest first and Gale second. Both use one global journal,
+position cap, daily-loss cap, cooldown and HALT flag. A resting/open symbol from
+either strategy blocks the other, and resting orders consume shared exposure
+slots. Evidence remains attributable by `strategy_id`:
 
 ```
+localdata/trade_journal.csv
 localdata/gale_screen_log.csv
-localdata/gale_shadow_signals.csv
 localdata/gale_status.csv
 localdata/gale_backtest_report_YYYY-MM-DD.json
 ```
 
-Every Gale row carries `strategy_id=gale_orb5`. Timestamped screen evidence
-must exist before a signal; legacy daily rows without `captured_at_utc` are
-excluded from intraday validation.
+Every Gale order/fill carries `strategy_id=gale_orb5`; Tempest carries
+`strategy_id=tempest_first_pullback`. Timestamped screen evidence must exist
+before a Gale signal. Legacy rows without `captured_at_utc` are excluded.
 
 ## Automated daily capture (GitHub Actions)
 
@@ -170,8 +175,9 @@ src/tempest/
   warehouse.py     # parquet warehouse, dedup, keep-last
   features.py      # gap_open, relvol, 9EMA, VWAP, day-session labels
   strategy.py      # 5 pillars + first-pullback detector (mechanical)
-  gale.py          # fixed ORB5 shadow strategy
-  gale_shadow.py   # timestamped shadow discovery + settlement
+  gale.py          # fixed ORB5 strategy
+  gale_trader.py   # shared-rail Alpaca PAPER execution
+  gale_shadow.py   # optional timestamped shadow discovery + settlement
   gale_backtest.py # point-in-time ORB5 backtest
   validation.py    # cost adjustment, chronological split, walk-forward
   backtest.py      # event simulation + per-bucket aggregation
@@ -188,7 +194,8 @@ scripts/
   run_backtest.py
   screen_market.py    # run the pillars screen, log qualifiers, fetch bars
   paper_trade.py      # one Tempest paper-trading pass
-  gale_shadow.py      # one Gale shadow-only pass
+  gale_paper_trade.py # one Gale paper-trading pass
+  gale_shadow.py      # optional research-only replay
   run_gale_backtest.py # durable Gale report
   capture_daily.sh    # screen + both backtests + commit evidence
   commit_evidence.sh  # per-file `git add -f`, pull-rebase-push with retry

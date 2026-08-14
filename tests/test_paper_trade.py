@@ -183,6 +183,7 @@ def test_trader_enters_fresh_signal_with_bracket(tmp_path, monkeypatch):
     j = risk.load_journal()
     assert (j["action"] == "order_submitted").any()
     assert not (j["action"] == "entry").any()
+    assert j["strategy_id"].iloc[-1] == "tempest_first_pullback"
     assert pd.notna(j["signal_ts"].iloc[-1])
     assert int(j["signal_age_bars"].iloc[-1]) == 0
 

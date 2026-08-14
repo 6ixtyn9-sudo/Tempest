@@ -86,23 +86,32 @@ jobs:
           fi
           exit 0
 
-      - name: Run Gale ORB5 shadow
+      - name: Run Gale ORB5 paper trade
+        id: gale
         if: steps.window.outputs.run == 'true'
-        continue-on-error: true
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           TEMPEST_PAPER: "1"
         run: |
           if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
-            echo "Alpaca secrets not set - skipping Gale shadow."
+            echo "Alpaca secrets not set - skipping Gale paper trade."
+            echo "gale_exit=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          PYTHONPATH=src python3 scripts/gale_shadow.py
+          set +e
+          PYTHONPATH=src python3 scripts/gale_paper_trade.py
+          code=$?
+          set -e
+          echo "gale_exit=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -ne 0 ]; then
+            echo "::error::Gale paper trade exited $code - see localdata/gale_status.csv"
+          fi
+          exit 0
 
-      - name: Commit paper-trade and Gale evidence
+      - name: Commit Tempest and Gale evidence
         if: steps.window.outputs.run == 'true'
-        run: bash scripts/commit_evidence.sh "paper poll + Gale shadow"
+        run: bash scripts/commit_evidence.sh "Tempest + Gale paper poll"
 
       - name: Save localdata cache
         if: steps.window.outputs.run == 'true'
@@ -111,9 +120,16 @@ jobs:
           path: localdata
           key: tempest-localdata-${{ github.run_id }}
 
-      - name: Fail run if paper trade failed
+      - name: Fail run if Tempest paper trade failed
         if: steps.window.outputs.run == 'true' && steps.paper.outputs.paper_exit != '' && steps.paper.outputs.paper_exit != '0'
         run: |
-          echo "Paper trade exited ${{ steps.paper.outputs.paper_exit }}."
+          echo "Tempest paper trade exited ${{ steps.paper.outputs.paper_exit }}."
           echo "Inspect localdata/paper_status.csv for the failing stage."
+          exit 1
+
+      - name: Fail run if Gale paper trade failed
+        if: steps.window.outputs.run == 'true' && steps.gale.outputs.gale_exit != '' && steps.gale.outputs.gale_exit != '0'
+        run: |
+          echo "Gale paper trade exited ${{ steps.gale.outputs.gale_exit }}."
+          echo "Inspect localdata/gale_status.csv for the failing stage."
           exit 1

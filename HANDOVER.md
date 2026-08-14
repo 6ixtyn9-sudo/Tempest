@@ -17,7 +17,7 @@ Current state
   screener), warehouse, features, strategy replication (5 pillars +
   first-pullback), validation, backtest core, market screen, and a PAPER
   trading layer (Alpaca paper only: bracket entries, stops, risk rails,
-  journal, P&L attribution). Tests pass (66).
+  journal, P&L attribution). Tests pass (71).
 
 Design decisions
   - The 5 pillars are HYPOTHESES with fixed thresholds from the course.
@@ -79,16 +79,20 @@ Known risks
     future float observations cannot validate earlier history.
   - run_backtest writes dated, versioned JSON evidence committed by capture.
 
-2026-08-14 — Gale ORB5 shadow lane
-  - Gale lives in Tempest but is isolated by strategy_id, signal log, status
-    and backtest report. It has no broker import and cannot submit orders.
+2026-08-14 — Gale ORB5 paper lane
+  - Operator explicitly promoted Gale from shadow to Alpaca PAPER execution;
+    live-money mode remains impossible.
+  - Gale lives in Tempest and reuses the hardened PaperTrader lifecycle while
+    retaining strategy_id=gale_orb5, Gale status and separate backtest reports.
   - Fixed prior: five-minute opening range, confirmed close above range/VWAP,
     >=1.5x five-bar median volume, <=0.5% chase, <=5% range width, range-low
     stop, 2R target and 15-bar horizon.
-  - screen_log now preserves immutable captured_at_utc snapshots; legacy rows
+  - screen_log preserves immutable captured_at_utc snapshots; legacy rows
     without timestamps are excluded from intraday availability checks.
-  - The paper poll runs Gale after Tempest as a non-blocking shadow step.
+  - The paper poll runs Tempest then Gale. Shared broker positions, resting
+    orders, max-three exposure slots, $200 daily loss, cooldown and HALT state
+    prevent cross-strategy duplicate or excess orders.
+  - Global trade_journal.csv carries strategy_id on orders, fills and exits;
+    attribution reports Tempest and Gale separately.
   - Daily capture writes separate point-in-time Gale backtest evidence.
-  - Promotion remains deferred until >=10 sessions and >=20 closed shadow
-    signals pass the documented operational evidence gate.
 """

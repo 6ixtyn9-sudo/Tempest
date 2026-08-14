@@ -1,7 +1,7 @@
 """Gale: fixed-prior five-minute opening-range breakout hypothesis.
 
-Gale is shadow-only. It shares Tempest's RTH features and captured mover
-universe, but has independent signals, reports and performance evidence.
+Gale shares Tempest's RTH features, captured mover universe and hardened PAPER
+broker lifecycle while retaining independent strategy identity and reports.
 """
 
 from dataclasses import dataclass
@@ -35,6 +35,18 @@ class GaleSignal:
     opening_range_width: float
     breakout_volume_ratio: float
     vwap: float
+
+    @property
+    def entry_ts(self) -> pd.Timestamp:
+        return self.signal_ts
+
+    @property
+    def entry_price(self) -> float:
+        return self.trigger_price
+
+    @property
+    def target_price(self) -> float:
+        return target_for(self.trigger_price, self.stop_price)
 
     @property
     def signal_id(self) -> str:

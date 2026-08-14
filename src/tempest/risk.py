@@ -17,8 +17,8 @@ COOLDOWN_PATH = DATA_DIR / "cooldown.json"
 JOURNAL_PATH = DATA_DIR / "trade_journal.csv"
 
 _JOURNAL_COLUMNS = [
-    "timestamp_utc", "symbol", "action", "side", "qty", "price", "order_id",
-    "status", "setup", "session", "signal_ts", "signal_age_bars",
+    "timestamp_utc", "strategy_id", "symbol", "action", "side", "qty", "price",
+    "order_id", "status", "setup", "session", "signal_ts", "signal_age_bars",
     "entry_price", "stop_price", "target_price", "exit_price", "pnl", "reason",
 ]
 

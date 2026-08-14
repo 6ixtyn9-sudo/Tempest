@@ -38,6 +38,11 @@ def _ny_minutes_to_close(now_utc: datetime) -> int:
 
 
 class PaperTrader:
+    strategy_id = "tempest_first_pullback"
+    setup_name = "first_pullback"
+    order_prefix = "tempest"
+    no_signal_reason = "no fresh first-pullback signal"
+
     def __init__(
         self, broker, source, limits: RiskLimits | None = None, now_fn=None,
     ):
@@ -150,7 +155,7 @@ class PaperTrader:
         sig = self._fresh_signal(bars, symbol)
         if sig is None:
             return {"symbol": symbol, "action": "watching",
-                    "reason": "no fresh first-pullback signal"}
+                    "reason": self.no_signal_reason}
         age = getattr(sig, "age_bars", 0)
         # Re-price a stale signal at the latest bar. The backtest fills on the
         # breakout bar; a poll that arrives N bars later must not pretend it
@@ -179,13 +184,14 @@ class PaperTrader:
         if not ok:
             return {"symbol": symbol, "action": "blocked", "reason": "; ".join(reasons)}
         target = fill + 2.0 * risk
-        cid = f"tempest-{symbol.upper()}-{uuid.uuid4().hex[:8]}"
+        cid = f"{self.order_prefix}-{symbol.upper()}-{uuid.uuid4().hex[:8]}"
         row = {
             "timestamp_utc": self._now().isoformat(),
+            "strategy_id": self.strategy_id,
             "symbol": symbol.upper(), "action": "order_submitted", "side": "buy",
             "qty": qty, "price": round(fill, 4),
             "order_id": cid, "status": "dry_run" if dry_run else "submitted",
-            "setup": "first_pullback", "session": str(sig.session),
+            "setup": self.setup_name, "session": str(sig.session),
             "signal_ts": str(sig.entry_ts), "signal_age_bars": age,
             "entry_price": round(fill, 4),
             "stop_price": round(sig.stop_price, 4),
@@ -397,8 +403,10 @@ class PaperTrader:
                             "reason": reason, "pnl": round(pnl, 2)})
                 continue
             append_journal({
-                "timestamp_utc": now.isoformat(), "symbol": sym, "action": action,
-                "side": "sell", "qty": qty, "price": round(px, 4),
+                "timestamp_utc": now.isoformat(),
+                "strategy_id": entry.get("strategy_id") or "legacy_unknown",
+                "symbol": sym, "action": action, "side": "sell",
+                "qty": qty, "price": round(px, 4),
                 "status": "filled", "session": str(now.date()),
                 "entry_price": round(avg, 4), "exit_price": round(px, 4),
                 "stop_price": entry.get("stop_price"),
@@ -429,9 +437,14 @@ class PaperTrader:
                 & (journal["action"] == "entry")
             ]
             entry_ts = None
+            entry_strategy = "legacy_unknown"
+            entry_setup = None
             if not entries.empty:
+                latest_entry = entries.iloc[-1]
+                entry_strategy = str(latest_entry.get("strategy_id") or "legacy_unknown")
+                entry_setup = latest_entry.get("setup")
                 try:
-                    entry_ts = pd.to_datetime(entries["timestamp_utc"].iloc[-1], utc=True)
+                    entry_ts = pd.to_datetime(latest_entry["timestamp_utc"], utc=True)
                 except Exception:
                     entry_ts = None
             held_bars = None
@@ -466,8 +479,9 @@ class PaperTrader:
                 or getattr(order, "status", "submitted")
             ).lower()
             append_journal({
-                "timestamp_utc": now.isoformat(), "symbol": sym,
-                "action": "exit_submitted", "side": "sell", "qty": qty,
+                "timestamp_utc": now.isoformat(), "strategy_id": entry_strategy,
+                "symbol": sym, "action": "exit_submitted", "side": "sell", "qty": qty,
+                "setup": entry_setup,
                 "price": round(exit_price, 4), "order_id": order_id,
                 "status": order_status, "session": str(now.date()),
                 "entry_price": round(avg, 4), "reason": reason,
@@ -507,6 +521,20 @@ class PaperTrader:
         pending = set(broker_pending)
         pending.update(pending_journal_orders())
         pending.update(open_journal_entries())
+        risk_positions = open_positions.copy() if open_positions is not None else pd.DataFrame()
+        live_symbols = set()
+        if not risk_positions.empty:
+            live_symbols = set(risk_positions["symbol"].astype(str).str.upper())
+        resting_only = sorted(pending - live_symbols)
+        if resting_only:
+            placeholders = pd.DataFrame([{
+                "symbol": symbol, "qty": 0, "avg_entry_price": 0,
+                "current_price": 0, "market_value": 0,
+            } for symbol in resting_only])
+            risk_positions = (
+                placeholders if risk_positions.empty
+                else pd.concat([risk_positions, placeholders], ignore_index=True)
+            )
         entries = []
         entry_window_open, window_reason = self._entry_window_open()
         for sym in candidates:
@@ -519,7 +547,7 @@ class PaperTrader:
                 entries.append({"symbol": up, "action": "blocked",
                                 "reason": f"entry window closed: {window_reason}"})
                 continue
-            result = self._try_entry(sym, open_positions, dry_run)
+            result = self._try_entry(sym, risk_positions, dry_run)
             entries.append(result)
             if result.get("action") in ("submitted", "would_enter"):
                 # Count accepted/resting entries toward the same-pass cap.
@@ -530,13 +558,13 @@ class PaperTrader:
                     "current_price": result.get("price", 0),
                     "market_value": 0.0,
                 }])
-                open_positions = (
-                    extra if open_positions is None or open_positions.empty
-                    else pd.concat([open_positions, extra], ignore_index=True)
+                risk_positions = (
+                    extra if risk_positions.empty
+                    else pd.concat([risk_positions, extra], ignore_index=True)
                 )
         return {
             "open_positions": broker_open_count,
-            "exposure_slots": len(open_positions) if open_positions is not None else 0,
+            "exposure_slots": len(risk_positions),
             "exits": (
                 list(order_events) + list(exit_order_events)
                 + list(reconciled) + list(exits)
