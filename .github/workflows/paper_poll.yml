@@ -90,8 +90,6 @@ jobs:
           # (n=9, nested, CI spans zero) -- this gathers out-of-sample
           # evidence. Unlike every other knob, RR does NOT reduce trade
           # count: it moves the exit, not the entry gate.
-          # NOT applied to Gale: its best trade ever reached 1.34R, so a
-          # target at 1.5R+ is unreachable and RR is not a lever there.
           TEMPEST_RR_TARGET: "3.0"
         run: |
           if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
@@ -109,44 +107,9 @@ jobs:
           fi
           exit 0
 
-      - name: Run Gale ORB5 paper trade
-        id: gale
+      - name: Commit Tempest evidence
         if: steps.window.outputs.run == 'true'
-        env:
-          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
-          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          TEMPEST_PAPER: "1"
-          # Research probe (2026-08-14). The 90-day sweep proved every
-          # configuration with a stop floor <= 0.5% loses money, and the
-          # live effective floor WAS 50 bps. Configs at >= 1% showed
-          # consistently positive means but never reached significance,
-          # and they cannot: they are nested subsets of the same 792
-          # sessions, so re-testing that data is survivorship analysis.
-          # 200 bps points paper trading at the untested region to
-          # generate genuinely OUT-OF-SAMPLE evidence. This is NOT an
-          # adoption of 2% as a parameter -- it is choosing where to
-          # aim the sensor. Expect far fewer fills (backtest n fell
-          # 111 -> 15 across this range). Remove to revert to 50 bps.
-          TEMPEST_MIN_RISK_BPS: "200"
-        run: |
-          if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
-            echo "Alpaca secrets not set - skipping Gale paper trade."
-            echo "gale_exit=0" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          set +e
-          PYTHONPATH=src python3 scripts/gale_paper_trade.py
-          code=$?
-          set -e
-          echo "gale_exit=$code" >> "$GITHUB_OUTPUT"
-          if [ "$code" -ne 0 ]; then
-            echo "::error::Gale paper trade exited $code - see localdata/gale_status.csv"
-          fi
-          exit 0
-
-      - name: Commit Tempest and Gale evidence
-        if: steps.window.outputs.run == 'true'
-        run: bash scripts/commit_evidence.sh "Tempest + Gale paper poll"
+        run: bash scripts/commit_evidence.sh "Tempest paper poll"
 
       - name: Save localdata cache
         if: steps.window.outputs.run == 'true'
@@ -160,11 +123,4 @@ jobs:
         run: |
           echo "Tempest paper trade exited ${{ steps.paper.outputs.paper_exit }}."
           echo "Inspect localdata/paper_status.csv for the failing stage."
-          exit 1
-
-      - name: Fail run if Gale paper trade failed
-        if: steps.window.outputs.run == 'true' && steps.gale.outputs.gale_exit != '' && steps.gale.outputs.gale_exit != '0'
-        run: |
-          echo "Gale paper trade exited ${{ steps.gale.outputs.gale_exit }}."
-          echo "Inspect localdata/gale_status.csv for the failing stage."
           exit 1
