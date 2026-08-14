@@ -76,3 +76,11 @@ timestamp_utc,stage,detail
 2026-08-14T14:15:34.357339+00:00,entry_watching,AKAN: no fresh ORB5 signal
 2026-08-14T14:15:34.359363+00:00,entry_watching,LBGJ: no fresh ORB5 signal
 2026-08-14T14:15:34.361359+00:00,entry_watching,WETO: no fresh ORB5 signal
+2026-08-14T14:20:27.903281+00:00,client_ok,Gale paper client constructed
+2026-08-14T14:20:27.908429+00:00,skip_extreme,HHS: relvol=131.5 > 50.0
+2026-08-14T14:20:27.910486+00:00,skip_extreme,CGTL: relvol=119.6 > 50.0
+2026-08-14T14:20:27.974630+00:00,equity,100000.00
+2026-08-14T14:20:28.410438+00:00,pass_done,open=0 slots=0 exits=0 entries=watching=3
+2026-08-14T14:20:28.413149+00:00,entry_watching,AKAN: no fresh ORB5 signal
+2026-08-14T14:20:28.415070+00:00,entry_watching,LBGJ: no fresh ORB5 signal
+2026-08-14T14:20:28.417034+00:00,entry_watching,WETO: no fresh ORB5 signal
