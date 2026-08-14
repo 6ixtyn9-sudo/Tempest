@@ -15,3 +15,6 @@ build/
 
 # OS
 .DS_Store
+
+# Warehouse parquet: large, regenerable via scripts/build_warehouse.py
+localdata/warehouse/
