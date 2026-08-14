@@ -67,6 +67,18 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           TEMPEST_PAPER: "1"
+          # Research probe (2026-08-14). The 90-day sweep proved every
+          # configuration with a stop floor <= 0.5% loses money, and the
+          # live effective floor WAS 50 bps. Configs at >= 1% showed
+          # consistently positive means but never reached significance,
+          # and they cannot: they are nested subsets of the same 792
+          # sessions, so re-testing that data is survivorship analysis.
+          # 200 bps points paper trading at the untested region to
+          # generate genuinely OUT-OF-SAMPLE evidence. This is NOT an
+          # adoption of 2% as a parameter -- it is choosing where to
+          # aim the sensor. Expect far fewer fills (backtest n fell
+          # 111 -> 15 across this range). Remove to revert to 50 bps.
+          TEMPEST_MIN_RISK_BPS: "200"
         run: |
           if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
             echo "Alpaca secrets not set - skipping paper trade."
