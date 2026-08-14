@@ -1,0 +1,171 @@
+{
+  "generated_at_utc": "2026-08-14T13:31:18.937839+00:00",
+  "code_revision": "a8e488bab155e7fca51654d6526448e00cb101e6",
+  "parameters": {
+    "spread_bps": 25.0,
+    "slippage_bps": 25.0,
+    "hold_bars": 15,
+    "relax": false
+  },
+  "symbols": [
+    "AIRO",
+    "BOXL",
+    "DFSC",
+    "FGI",
+    "FRGT",
+    "LNSR",
+    "NTHI",
+    "RRGB"
+  ],
+  "aggregate": {
+    "n": 0
+  },
+  "reports": [
+    {
+      "symbol": "AIRO",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 17,
+        "passed": 0,
+        "reject_reasons": {
+          "relvol 0.1 < 5.0": 1,
+          "total_volume 42,696 < 1,000,000": 1,
+          "gap -0.0154 < 0.02": 1,
+          "float missing": 3,
+          "relvol 0.4 < 5.0": 1,
+          "total_volume 104,306 < 1,000,000": 1,
+          "gap 0.0104 < 0.02": 1,
+          "relvol 4.5 < 5.0": 1
+        }
+      }
+    },
+    {
+      "symbol": "BOXL",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 17,
+        "passed": 0,
+        "reject_reasons": {
+          "float missing": 1
+        }
+      }
+    },
+    {
+      "symbol": "DFSC",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 18,
+        "passed": 0,
+        "reject_reasons": {}
+      }
+    },
+    {
+      "symbol": "FGI",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 18,
+        "passed": 0,
+        "reject_reasons": {
+          "float missing": 1
+        }
+      }
+    },
+    {
+      "symbol": "FRGT",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 18,
+        "passed": 0,
+        "reject_reasons": {}
+      }
+    },
+    {
+      "symbol": "LNSR",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 18,
+        "passed": 0,
+        "reject_reasons": {
+          "float missing": 1
+        }
+      }
+    },
+    {
+      "symbol": "NTHI",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 17,
+        "passed": 0,
+        "reject_reasons": {
+          "total_volume 923,277 < 1,000,000": 1,
+          "float missing": 1
+        }
+      }
+    },
+    {
+      "symbol": "RRGB",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "screen_stats": {
+        "sessions": 17,
+        "passed": 0,
+        "reject_reasons": {
+          "relvol 0.6 < 5.0": 1,
+          "total_volume 69,402 < 1,000,000": 1,
+          "gap 0.0082 < 0.02": 1,
+          "float missing": 3,
+          "relvol 0.5 < 5.0": 1,
+          "total_volume 116,910 < 1,000,000": 1,
+          "gap 0.0102 < 0.02": 1
+        }
+      }
+    }
+  ]
+}

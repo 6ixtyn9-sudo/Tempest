@@ -1,0 +1,120 @@
+{
+  "strategy_id": "gale_orb5",
+  "generated_at_utc": "2026-08-14T13:31:20.236666+00:00",
+  "code_revision": "a8e488bab155e7fca51654d6526448e00cb101e6",
+  "parameters": {
+    "spread_bps": 25.0,
+    "slippage_bps": 25.0
+  },
+  "symbols": [
+    "AIRO",
+    "BOXL",
+    "DFSC",
+    "FGI",
+    "FRGT",
+    "LNSR",
+    "NTHI",
+    "RRGB"
+  ],
+  "aggregate": {
+    "n": 0
+  },
+  "reports": [
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "AIRO",
+      "n_signals": 3,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 3
+    },
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "BOXL",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 0
+    },
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "DFSC",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 0
+    },
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "FGI",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 0
+    },
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "FRGT",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 0
+    },
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "LNSR",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 0
+    },
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "NTHI",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 0
+    },
+    {
+      "strategy_id": "gale_orb5",
+      "symbol": "RRGB",
+      "n_signals": 0,
+      "n_trades": 0,
+      "summary": {
+        "n": 0
+      },
+      "bucket_summary": {},
+      "trades": [],
+      "rejected_unavailable": 0
+    }
+  ]
+}
