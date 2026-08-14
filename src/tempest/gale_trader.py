@@ -1,8 +1,8 @@
 """Alpaca PAPER execution lane for Gale ORB5.
 
 All broker lifecycle, account exposure, cooldown and loss controls are inherited
-from the hardened shared PaperTrader. Gale overrides only signal discovery and
-its narrower 09:35-11:00 ET entry window.
+from the shared PaperTrader. Gale overrides only signal discovery and its
+narrower 09:35-11:00 ET entry window.
 """
 
 import pandas as pd
@@ -27,9 +27,10 @@ class GalePaperTrader(PaperTrader):
         return 0.005
 
     def _entry_window_open(self) -> tuple[bool, str]:
-        now_et = pd.Timestamp(self._now()).tz_convert("America/New_York")
-        if now_et.weekday() >= 5:
-            return False, "weekend"
+        clock = self._clock()
+        if not clock["is_open"]:
+            return False, "broker reports market closed"
+        now_et = self._clock_now().tz_convert("America/New_York")
         minute = now_et.hour * 60 + now_et.minute
         if minute < 9 * 60 + 35:
             return False, "before 09:35 ET"
@@ -40,11 +41,12 @@ class GalePaperTrader(PaperTrader):
     def _fresh_signal(self, bars: pd.DataFrame, symbol: str):
         if bars is None or bars.empty:
             return None
-        feat = compute_features(bars)
+        completed = self._completed_bars(bars)
+        feat = compute_features(completed)
         if feat is None or feat.empty or "session" not in feat.columns:
             return None
-        now = self._now()
-        now_et = pd.Timestamp(now).tz_convert("America/New_York")
+        now = self._clock_now()
+        now_et = now.tz_convert("America/New_York")
         session = feat["session"].iloc[-1]
         if session != now_et.date():
             return None

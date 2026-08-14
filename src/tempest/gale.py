@@ -1,6 +1,6 @@
 """Gale: fixed-prior five-minute opening-range breakout hypothesis.
 
-Gale shares Tempest's RTH features, captured mover universe and hardened PAPER
+Gale shares Tempest's RTH features, captured mover universe and PAPER
 broker lifecycle while retaining independent strategy identity and reports.
 """
 

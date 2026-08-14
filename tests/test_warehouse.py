@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from tempest import warehouse
-from tempest.warehouse import load_from_warehouse, save_to_warehouse, sanitize_symbol
+from tempest.warehouse import load_from_warehouse, sanitize_symbol, save_to_warehouse
 
 
 def test_sanitize_symbol_rejects_bad(tmp_path, monkeypatch):

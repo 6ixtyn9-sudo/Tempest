@@ -1,7 +1,6 @@
-"""Paper risk rails for the momentum trader.
+"""Shared PAPER risk rails for Tempest and Gale.
 
-Fail-open on missing data; fail-closed on anything that looks like a
-real-money or runaway path (halt flag, paper-env guard lives in broker.py).
+Missing first-run files are empty state; present-but-corrupt state fails closed.
 """
 
 import json
@@ -28,7 +27,7 @@ class RiskLimits:
     max_open_positions: int = 3
     max_notional_per_position: float = 1000.0
     max_risk_per_position: float = 50.0
-    max_daily_realized_loss: float = 200.0
+    max_daily_loss: float = 200.0
     per_symbol_cooldown_seconds: int = 3600
     horizon_bars: int = 15
     close_before_market_close_minutes: int = 30
@@ -42,9 +41,30 @@ def load_journal() -> pd.DataFrame:
     if not JOURNAL_PATH.exists():
         return pd.DataFrame(columns=_JOURNAL_COLUMNS)
     try:
-        return pd.read_csv(JOURNAL_PATH)
-    except (pd.errors.EmptyDataError, pd.errors.ParserError):
-        return pd.DataFrame(columns=_JOURNAL_COLUMNS)
+        journal = pd.read_csv(JOURNAL_PATH)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+        raise RuntimeError(f"trade journal is unreadable: {exc}") from exc
+    missing = set(_JOURNAL_COLUMNS) - set(journal.columns)
+    if missing:
+        raise RuntimeError(
+            f"trade journal is missing required columns: {', '.join(sorted(missing))}"
+        )
+    if not journal.empty:
+        timestamps = pd.to_datetime(
+            journal["timestamp_utc"], utc=True, errors="coerce", format="mixed"
+        )
+        symbols = journal["symbol"].fillna("").astype(str).str.strip()
+        actions = journal["action"].fillna("").astype(str).str.strip()
+        if timestamps.isna().any() or symbols.eq("").any() or actions.eq("").any():
+            raise RuntimeError("trade journal contains invalid lifecycle rows")
+    return journal
+
+
+def _atomic_csv(df: pd.DataFrame, path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    df.to_csv(temporary, index=False)
+    temporary.replace(path)
 
 
 def append_journal(row: dict) -> None:
@@ -55,8 +75,7 @@ def append_journal(row: dict) -> None:
         df = add
     else:
         df = pd.concat([df, add], ignore_index=True)
-    JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(JOURNAL_PATH, index=False)
+    _atomic_csv(df, JOURNAL_PATH)
 
 
 def open_journal_entries(journal: pd.DataFrame | None = None) -> dict:
@@ -72,7 +91,9 @@ def open_journal_entries(journal: pd.DataFrame | None = None) -> dict:
             continue
         action = str(row.get("action", ""))
         status = str(row.get("status", "") or "").lower()
-        if action == "entry" and status in ("filled", "partially_filled"):
+        if action in ("entry", "entry_partial") and status in (
+            "filled", "partially_filled",
+        ):
             open_rows[sym] = row
         elif action in ("exit", "stop_filled", "tp_filled", "broker_closed"):
             open_rows.pop(sym, None)
@@ -98,6 +119,8 @@ def pending_journal_orders(journal: pd.DataFrame | None = None) -> dict:
         if (
             action == "order_submitted" and status not in ("dry_run", "rejected")
         ) or (action == "entry" and status == "submitted"):
+            pending[sym] = row
+        elif action == "entry_partial":
             pending[sym] = row
         elif action in terminal:
             pending.pop(sym, None)
@@ -151,15 +174,17 @@ def cooldown_remaining(symbol: str, cooldown_seconds: int = 3600) -> float:
         return 0.0
     try:
         state = json.loads(COOLDOWN_PATH.read_text())
-    except (OSError, json.JSONDecodeError):
-        return 0.0
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"cooldown state is unreadable: {exc}") from exc
+    if not isinstance(state, dict):
+        raise RuntimeError("cooldown state must be a JSON object")
     last = state.get(str(symbol).upper())
     if not last:
         return 0.0
     try:
         last_dt = _utc(datetime.fromisoformat(str(last).replace("Z", "+00:00")))
-    except (ValueError, TypeError):
-        return 0.0
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError(f"cooldown timestamp for {symbol} is invalid") from exc
     elapsed = (datetime.now(timezone.utc) - last_dt).total_seconds()
     return max(0.0, float(cooldown_seconds) - elapsed)
 
@@ -169,11 +194,15 @@ def record_cooldown(symbol: str) -> None:
     if COOLDOWN_PATH.exists():
         try:
             state = json.loads(COOLDOWN_PATH.read_text())
-        except (OSError, json.JSONDecodeError):
-            state = {}
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"cooldown state is unreadable: {exc}") from exc
+        if not isinstance(state, dict):
+            raise RuntimeError("cooldown state must be a JSON object")
     state[str(symbol).upper()] = datetime.now(timezone.utc).isoformat()
     COOLDOWN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    COOLDOWN_PATH.write_text(json.dumps(state, indent=2))
+    temporary = COOLDOWN_PATH.with_suffix(COOLDOWN_PATH.suffix + ".tmp")
+    temporary.write_text(json.dumps(state, indent=2))
+    temporary.replace(COOLDOWN_PATH)
 
 
 def check_entry_ok(
@@ -182,6 +211,7 @@ def check_entry_ok(
     price: float,
     limits: RiskLimits,
     open_positions: pd.DataFrame,
+    account_day_pnl: float | None = None,
 ) -> tuple[bool, list[str]]:
     """Run the entry gate. Returns (allowed, reasons)."""
     reasons: list[str] = []
@@ -198,9 +228,32 @@ def check_entry_ok(
     notional = qty * price
     if notional > limits.max_notional_per_position:
         reasons.append(f"notional ${notional:.2f} > ${limits.max_notional_per_position:.2f}")
-    loss = today_realized_pnl()
-    if -loss >= limits.max_daily_realized_loss:
-        reasons.append(f"daily loss cap (${-loss:.2f} >= ${limits.max_daily_realized_loss:.2f})")
+    if account_day_pnl is not None:
+        net_daily_pnl = float(account_day_pnl)
+    else:
+        # Research/tests may not have a broker account snapshot. Production
+        # always supplies account_day_pnl from Alpaca.
+        realized_pnl = today_realized_pnl()
+        unrealized_losses = 0.0
+        if not open_positions.empty:
+            for _, position in open_positions.iterrows():
+                try:
+                    position_qty = float(position.get("qty") or 0)
+                    if position_qty == 0:
+                        continue
+                    average = float(position["avg_entry_price"])
+                    current = float(position["current_price"])
+                    position_pnl = (current - average) * position_qty
+                except (KeyError, TypeError, ValueError):
+                    reasons.append("open-position P&L unavailable")
+                    continue
+                unrealized_losses += min(0.0, position_pnl)
+        net_daily_pnl = realized_pnl + unrealized_losses
+    if -net_daily_pnl >= limits.max_daily_loss:
+        reasons.append(
+            f"daily loss cap (${-net_daily_pnl:.2f} >= "
+            f"${limits.max_daily_loss:.2f})"
+        )
     cool = cooldown_remaining(symbol, limits.per_symbol_cooldown_seconds)
     if cool > 0:
         reasons.append(f"cooldown {cool:.0f}s")

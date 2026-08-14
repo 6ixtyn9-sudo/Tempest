@@ -5,4 +5,5 @@ yfinance==1.5.1
 python-dotenv==1.2.2
 requests==2.33.0
 pytest==9.0.3
+ruff==0.16.3
 alpaca-py==0.43.5

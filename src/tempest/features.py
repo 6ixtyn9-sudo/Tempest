@@ -14,7 +14,6 @@ no look-ahead: each bar's features use only bars at/before it.
 import numpy as np
 import pandas as pd
 
-
 RTH_OPEN_MINUTE = 9 * 60 + 30
 RTH_CLOSE_MINUTE = 16 * 60
 

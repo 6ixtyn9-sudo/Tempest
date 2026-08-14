@@ -14,7 +14,11 @@ import pandas as pd
 from tempest.config import DATA_DIR
 from tempest.features import compute_features
 from tempest.gale import (
-    HOLD_BARS, STRATEGY_ID, detect_gale_orb, shadow_entry_price, target_for,
+    HOLD_BARS,
+    STRATEGY_ID,
+    detect_gale_orb,
+    shadow_entry_price,
+    target_for,
 )
 from tempest.validation import CostModel
 

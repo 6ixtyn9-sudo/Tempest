@@ -19,7 +19,6 @@ Caveats (documented, not hidden):
 import json
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 import requests
 

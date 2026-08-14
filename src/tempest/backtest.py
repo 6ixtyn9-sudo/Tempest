@@ -12,8 +12,8 @@ import pandas as pd
 
 from tempest.config import DATA_DIR
 from tempest.features import compute_features
-from tempest.validation import CostModel, TradeResult, bucket_for, summarize
 from tempest.strategy import detect_first_pullback, screen_pillars
+from tempest.validation import CostModel, TradeResult, bucket_for, summarize
 
 
 def load_float_map(path=None) -> dict:
@@ -89,6 +89,7 @@ def run_backtest(
 
     fmap = float_map if float_map is not None else load_float_map()
     trades: list[TradeResult] = []
+    eligible_signals = 0
     screen_stats = {"sessions": 0, "passed": 0, "reject_reasons": {}}
 
     for session, grp in df.groupby("session", sort=True):
@@ -120,6 +121,7 @@ def run_backtest(
                     screen_stats["reject_reasons"][key] = screen_stats["reject_reasons"].get(key, 0) + 1
                 continue
             session_passed = True
+            eligible_signals += 1
             entry_hour = _ny_hour(sig.entry_ts)
             bucket = bucket_for(gap, asof_relvol, sig.entry_price, entry_hour)
             trades.append(
@@ -140,7 +142,7 @@ def run_backtest(
     }
     return {
         "symbol": symbol,
-        "n_signals": len(results),
+        "n_signals": eligible_signals,
         "n_trades": len(results),
         "summary": summary,
         "bucket_summary": bucket_summary,
@@ -158,35 +160,59 @@ def _ny_hour(ts) -> int:
 
 
 def _simulate(sig, grp, cost_model: CostModel, hold_bars: int, bucket: dict) -> TradeResult | None:
-    """Simulate one signal forward: stop / target / horizon. Look-ahead-free:
-    only bars after the entry bar are used."""
-    entry_idx = grp.index[grp["bar_ts_utc"] == sig.entry_ts]
-    if len(entry_idx) == 0:
+    """Simulate the earliest fill attainable after the signal candle closes."""
+    signal_indices = grp.index[grp["bar_ts_utc"] == sig.entry_ts]
+    if len(signal_indices) == 0:
         return None
-    start = entry_idx[0] + 1
+    signal_idx = int(signal_indices[0])
+    start = signal_idx + 1
     if start >= len(grp):
         return None
-    entry = sig.entry_price
-    stop = sig.stop_price
-    target = sig.target_price
+
+    # Paper execution submits a buy limit only after the crossing candle is
+    # complete. The backtest therefore cannot fill inside that signal candle.
+    limit_price = float(grp["close"].iloc[signal_idx])
+    trigger_price = float(sig.entry_price)
+    if (limit_price - trigger_price) / max(trigger_price, 1e-9) > 0.01:
+        return None
+    next_bar = grp.iloc[start]
+    if float(next_bar["low"]) > limit_price:
+        return None  # the post-signal limit was never reachable
+    entry = min(float(next_bar["open"]), limit_price)
+    stop = float(sig.stop_price)
+    risk = entry - stop
+    if risk <= 0:
+        return None
+    target = entry + 2.0 * risk
 
     for i in range(start, min(start + hold_bars, len(grp))):
-        low, high = grp["low"].iloc[i], grp["high"].iloc[i]
+        low, high = float(grp["low"].iloc[i]), float(grp["high"].iloc[i])
+        # Same-bar path is unknown; stop-first is the conservative convention.
         if low <= stop:
-            return _mk(sig, entry, stop, "stop", cost_model, i - start, bucket)
+            return _mk(
+                sig, entry, stop, "stop", cost_model, i - start, bucket,
+                entry_ts=next_bar["bar_ts_utc"],
+            )
         if high >= target:
-            return _mk(sig, entry, target, "target", cost_model, i - start, bucket)
-    # Horizon exit at the last bar's close.
+            return _mk(
+                sig, entry, target, "target", cost_model, i - start, bucket,
+                entry_ts=next_bar["bar_ts_utc"],
+            )
     i = min(start + hold_bars - 1, len(grp) - 1)
-    return _mk(sig, entry, float(grp["close"].iloc[i]), "horizon", cost_model, i - start, bucket)
+    return _mk(
+        sig, entry, float(grp["close"].iloc[i]), "horizon",
+        cost_model, i - start, bucket, entry_ts=next_bar["bar_ts_utc"],
+    )
 
 
-def _mk(sig, entry, exit_px, reason, cost_model, held_bars, bucket) -> TradeResult:
+def _mk(
+    sig, entry, exit_px, reason, cost_model, held_bars, bucket, entry_ts,
+) -> TradeResult:
     gross = (exit_px / entry) - 1.0
     net = cost_model.net_return(gross)
     r = (exit_px - entry) / (entry - sig.stop_price) if entry != sig.stop_price else 0.0
     return TradeResult(
-        symbol=sig.symbol, session=sig.session, entry_ts=str(sig.entry_ts),
+        symbol=sig.symbol, session=sig.session, entry_ts=str(entry_ts),
         entry_price=entry, exit_price=float(exit_px), exit_reason=reason,
         gross_return=gross, net_return=net, r_multiple=float(r),
         held_bars=held_bars, bucket=bucket,

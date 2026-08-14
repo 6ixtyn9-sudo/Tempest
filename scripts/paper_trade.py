@@ -24,16 +24,15 @@ from tempest.risk import RiskLimits, is_halted  # noqa: E402
 from tempest.sources.alpaca import AlpacaSource  # noqa: E402
 from tempest.trader import PaperTrader  # noqa: E402
 
-
 STATUS_PATH = None
 
 
 def _status(stage: str, detail: str = "") -> None:
-    """Append one line to localdata/paper_status.csv so the paper step's
-    outcome is visible in git. Actions logs need a sign-in, and the step is
-    wrapped in `|| echo` so a failure never turns the run red."""
-    import csv, os
+    """Append one durable operational outcome to paper_status.csv."""
+    import csv
+    import os
     from pathlib import Path as _P
+
     from tempest.config import DATA_DIR as _D
     override = STATUS_PATH or os.getenv("TEMPEST_STATUS_PATH")
     path = _P(override) if override else _D / "paper_status.csv"
@@ -63,7 +62,7 @@ def main() -> int:
         max_notional_per_position=args.max_notional,
         max_risk_per_position=args.max_risk,
         max_open_positions=args.max_open,
-        max_daily_realized_loss=args.max_daily_loss,
+        max_daily_loss=args.max_daily_loss,
         per_symbol_cooldown_seconds=args.cooldown_seconds,
         horizon_bars=args.horizon_bars,
     )

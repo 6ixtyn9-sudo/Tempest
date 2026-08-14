@@ -20,9 +20,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from tempest.backtest import run_backtest  # noqa: E402
+from tempest.config import DATA_DIR, WAREHOUSE_DIR  # noqa: E402
 from tempest.validation import CostModel, summarize  # noqa: E402
 from tempest.warehouse import load_from_warehouse  # noqa: E402
-from tempest.config import DATA_DIR, WAREHOUSE_DIR  # noqa: E402
 
 
 def main() -> int:

@@ -50,6 +50,9 @@ def test_resting_entry_is_not_invented_as_stop_fill():
     _submitted()
     fake = FakeBroker()
     fake.pending.add("YXT")
+    fake.order_states["tempest-YXT-abc"] = {
+        "status": "accepted", "filled_qty": 0, "filled_avg_price": None,
+    }
     trader = PaperTrader(fake, FakeSource({}), now_fn=_frame_now)
 
     result = trader.run_once([], dry_run=False)
@@ -67,6 +70,9 @@ def test_position_promotes_submitted_order_to_confirmed_fill():
         "current_price": 10.52, "market_value": 420.8,
     }])
     fake.pending.add("YXT")
+    fake.order_states["tempest-YXT-abc"] = {
+        "status": "filled", "filled_qty": 40, "filled_avg_price": 10.48,
+    }
     trader = PaperTrader(fake, FakeSource({}), now_fn=_frame_now)
 
     result = trader.run_once([], dry_run=False)
@@ -108,9 +114,16 @@ def test_entry_sizing_respects_stop_risk_and_notional():
 
 
 def test_near_close_blocks_new_entry():
-    now = lambda: pd.Timestamp("2026-08-03 19:35:00+00:00").to_pydatetime()
+    def now():
+        return pd.Timestamp("2026-08-03 19:35:00+00:00").to_pydatetime()
+
+    broker_ = FakeBroker()
+    broker_.clock_info.update({
+        "timestamp_utc": pd.Timestamp("2026-08-03T19:35:00+00:00"),
+        "minutes_to_close": 25,
+    })
     trader = PaperTrader(
-        FakeBroker(), FakeSource({"YXT": _ending_at_crossing()}), now_fn=now,
+        broker_, FakeSource({"YXT": _ending_at_crossing()}), now_fn=now,
     )
 
     result = trader.run_once(["YXT"], dry_run=False)
@@ -120,9 +133,13 @@ def test_near_close_blocks_new_entry():
 
 
 def test_prior_session_signal_is_not_actionable_today():
-    next_day = lambda: pd.Timestamp("2026-08-04 13:38:00+00:00").to_pydatetime()
+    def next_day():
+        return pd.Timestamp("2026-08-04 13:38:00+00:00").to_pydatetime()
+
+    broker_ = FakeBroker()
+    broker_.clock_info["timestamp_utc"] = pd.Timestamp("2026-08-04T13:38:00+00:00")
     trader = PaperTrader(
-        FakeBroker(), FakeSource({"YXT": _ending_at_crossing()}), now_fn=next_day,
+        broker_, FakeSource({"YXT": _ending_at_crossing()}), now_fn=next_day,
     )
 
     result = trader.run_once(["YXT"], dry_run=False)
@@ -151,9 +168,13 @@ def test_broker_closed_fill_counts_in_realized_pnl():
 
 
 def test_wall_clock_stale_bar_is_not_actionable():
-    late = lambda: pd.Timestamp("2026-08-03 14:30:00+00:00").to_pydatetime()
+    def late():
+        return pd.Timestamp("2026-08-03 14:30:00+00:00").to_pydatetime()
+
+    broker_ = FakeBroker()
+    broker_.clock_info["timestamp_utc"] = pd.Timestamp("2026-08-03T14:30:00+00:00")
     trader = PaperTrader(
-        FakeBroker(), FakeSource({"YXT": _ending_at_crossing()}), now_fn=late,
+        broker_, FakeSource({"YXT": _ending_at_crossing()}), now_fn=late,
     )
 
     result = trader.run_once(["YXT"], dry_run=False)

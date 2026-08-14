@@ -38,3 +38,23 @@ def test_gale_backtest_requires_available_screen_observation():
     assert valid["trades"][0]["exit_reason"] == "target"
     assert future["n_trades"] == 0
     assert future["rejected_unavailable"] == 1
+
+
+def test_gale_backtest_requires_post_signal_limit_to_be_reachable():
+    from tempest.gale import GaleSignal
+    from tempest.gale_backtest import _simulate
+    from tempest.validation import CostModel
+
+    ts = pd.Timestamp("2026-08-03T13:35:00+00:00")
+    bars = pd.DataFrame([
+        {"bar_ts_utc": ts, "open": 10.2, "high": 10.4, "low": 10.1, "close": 10.3},
+        {"bar_ts_utc": ts + pd.Timedelta(minutes=1), "open": 10.5,
+         "high": 10.8, "low": 10.4, "close": 10.7},
+    ])
+    signal = GaleSignal(
+        symbol="GALE", session=ts.date(), signal_ts=ts, trigger_price=10.3,
+        stop_price=9.9, opening_range_high=10.3, opening_range_low=9.9,
+        opening_range_width=0.4, breakout_volume_ratio=2.0, vwap=10.1,
+    )
+
+    assert _simulate(signal, bars, 0, CostModel()) is None

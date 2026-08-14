@@ -12,6 +12,7 @@ The pattern must form on the latest completed bar — no chasing older
 signals. Nothing here can touch a live account (broker is paper-only).
 """
 
+import math
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -19,22 +20,55 @@ import pandas as pd
 
 from tempest.features import compute_features
 from tempest.risk import (
-    RiskLimits, append_journal, check_entry_ok, load_journal,
-    open_journal_entries, pending_exit_orders, pending_journal_orders,
+    RiskLimits,
+    append_journal,
+    check_entry_ok,
+    load_journal,
+    open_journal_entries,
+    pending_exit_orders,
+    pending_journal_orders,
     record_cooldown,
 )
 from tempest.strategy import detect_first_pullback
 
 
-def _ny_minutes_to_close(now_utc: datetime) -> int:
-    """Minutes from now to 16:00 ET (regular close). Negative after close."""
+def _authoritative_clock(broker) -> dict:
+    """Read and validate broker market time; never infer an open market."""
+    if not hasattr(broker, "get_clock_info"):
+        raise RuntimeError("broker does not expose authoritative market clock")
     try:
-        from zoneinfo import ZoneInfo
-        ny = now_utc.astimezone(ZoneInfo("America/New_York"))
-        close = ny.replace(hour=16, minute=0, second=0, microsecond=0)
-        return int((close - ny).total_seconds() // 60)
-    except Exception:
-        return 9999
+        info = broker.get_clock_info()
+        required = {"is_open", "timestamp_utc", "minutes_to_close"}
+        if not isinstance(info, dict) or not required.issubset(info):
+            raise ValueError("missing required fields")
+        if type(info["is_open"]) is not bool:  # do not coerce strings truthy
+            raise ValueError("is_open is not boolean")
+        timestamp = pd.Timestamp(info["timestamp_utc"])
+        if pd.isna(timestamp):
+            raise ValueError("timestamp is missing")
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.tz_localize("UTC")
+        else:
+            timestamp = timestamp.tz_convert("UTC")
+        raw_minutes = info["minutes_to_close"]
+        if isinstance(raw_minutes, bool):
+            raise ValueError("minutes_to_close is boolean")
+        minutes_float = float(raw_minutes)
+        if (
+            not math.isfinite(minutes_float)
+            or minutes_float < 0
+            or not minutes_float.is_integer()
+        ):
+            raise ValueError("minutes_to_close is invalid")
+        minutes = int(minutes_float)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RuntimeError(f"broker returned invalid market clock: {exc}") from exc
+    return {
+        **info,
+        "is_open": info["is_open"],
+        "timestamp_utc": timestamp,
+        "minutes_to_close": minutes,
+    }
 
 
 class PaperTrader:
@@ -51,16 +85,36 @@ class PaperTrader:
         self.limits = limits or RiskLimits()
         self.now_fn = now_fn or (lambda: datetime.now(timezone.utc))
         self.client = None  # lazily built (tests inject a fake)
+        self.clock_info = None
+        self.account_day_pnl = None
 
     def _now(self) -> datetime:
+        """Process timestamp for evidence only, never market-open authority."""
         now = self.now_fn()
         if now.tzinfo is None:
             now = now.replace(tzinfo=timezone.utc)
         return now.astimezone(timezone.utc)
 
+    def _clock(self) -> dict:
+        if self.clock_info is None:
+            self.clock_info = _authoritative_clock(self.broker)
+        return self.clock_info
+
+    def _clock_now(self) -> pd.Timestamp:
+        return pd.Timestamp(self._clock()["timestamp_utc"])
+
+    def _completed_bars(self, bars: pd.DataFrame) -> pd.DataFrame:
+        """Drop any minute whose closing boundary is still in the future."""
+        if bars is None or bars.empty:
+            return bars
+        out = bars.copy()
+        timestamps = pd.to_datetime(out["bar_ts_utc"], utc=True, errors="coerce")
+        complete = timestamps + pd.Timedelta(minutes=1) <= self._clock_now()
+        return out.loc[complete & timestamps.notna()].reset_index(drop=True)
+
     # -- entry ------------------------------------------------------------
     def _candidate_bars(self, symbol: str, lookback_days: int = 10) -> pd.DataFrame:
-        end = datetime.now(timezone.utc)
+        end = self._clock_now().to_pydatetime()
         start = end - timedelta(days=lookback_days)
         return self.source.fetch_1m(symbol, start, end)
 
@@ -106,11 +160,12 @@ class PaperTrader:
         """
         if bars is None or bars.empty:
             return None
-        feat = compute_features(bars)
+        completed = self._completed_bars(bars)
+        feat = compute_features(completed)
         if feat is None or feat.empty or "session" not in feat.columns:
             return None
-        now = self._now()
-        now_et = pd.Timestamp(now).tz_convert("America/New_York")
+        now = self._clock_now()
+        now_et = now.tz_convert("America/New_York")
         current_session = feat["session"].iloc[-1]
         if current_session != now_et.date():
             return None
@@ -161,16 +216,15 @@ class PaperTrader:
         # breakout bar; a poll that arrives N bars later must not pretend it
         # got that price. Enter at the current price or skip.
         fill = float(getattr(sig, "last_price", sig.entry_price))
-        if age > 0:
-            if fill <= sig.stop_price:
-                return {"symbol": symbol, "action": "watching",
-                        "reason": f"signal {age}b old, price {fill:.4f} below stop "
-                                  f"{sig.stop_price:.4f} - setup broken"}
-            slip = (fill - sig.entry_price) / max(sig.entry_price, 1e-9)
-            if slip > self._max_entry_slippage():
-                return {"symbol": symbol, "action": "watching",
-                        "reason": f"signal {age}b old, price ran {slip:.2%} past "
-                                  f"entry - chasing"}
+        if fill <= sig.stop_price:
+            return {"symbol": symbol, "action": "watching",
+                    "reason": f"signal {age}b old, price {fill:.4f} below stop "
+                              f"{sig.stop_price:.4f} - setup broken"}
+        slip = (fill - sig.entry_price) / max(sig.entry_price, 1e-9)
+        if slip > self._max_entry_slippage():
+            return {"symbol": symbol, "action": "watching",
+                    "reason": f"signal {age}b old, price ran {slip:.2%} past "
+                              f"entry - chasing"}
         risk = fill - sig.stop_price
         if risk <= 0:
             return {"symbol": symbol, "action": "blocked", "reason": "non-positive risk"}
@@ -179,7 +233,8 @@ class PaperTrader:
             return {"symbol": symbol, "action": "blocked",
                     "reason": "qty < 1 at notional/risk limits"}
         ok, reasons = check_entry_ok(
-            symbol, qty, fill, self.limits, open_positions
+            symbol, qty, fill, self.limits, open_positions,
+            account_day_pnl=self.account_day_pnl,
         )
         if not ok:
             return {"symbol": symbol, "action": "blocked", "reason": "; ".join(reasons)}
@@ -224,97 +279,123 @@ class PaperTrader:
 
     # -- broker lifecycle reconciliation ----------------------------------
     def _reconcile_entry_orders(
-        self,
-        open_positions: pd.DataFrame,
-        broker_pending: set[str],
-        dry_run: bool,
+        self, broker_pending: set[str], dry_run: bool,
     ) -> list[dict]:
-        """Promote submitted orders only after the broker confirms a fill.
-
-        A resting limit order is not a position. If it disappears without a
-        position, query its authoritative status and record cancellation,
-        expiry or rejection instead of fabricating a stopped-out trade.
-        """
+        """Reconcile cumulative parent-order fills without losing remainders."""
         submitted = pending_journal_orders()
         if not submitted:
             return []
-        live_by_symbol = {}
-        if open_positions is not None and not open_positions.empty:
-            live_by_symbol = {
-                str(row["symbol"]).upper(): row
-                for _, row in open_positions.iterrows()
-            }
+        if dry_run:
+            return [
+                {"symbol": symbol, "action": "would_check_order_status"}
+                for symbol in submitted
+            ]
+        if not hasattr(self.broker, "get_order_status"):
+            raise RuntimeError("broker does not expose parent-order status")
+
         out = []
-        terminal = {"canceled", "cancelled", "expired", "rejected"}
+        terminal_actions = {
+            "canceled": "entry_cancelled",
+            "cancelled": "entry_cancelled",
+            "expired": "entry_expired",
+            "done_for_day": "entry_expired",
+            "rejected": "entry_rejected",
+        }
+        active = {
+            "new", "accepted", "pending_new", "partially_filled",
+            "pending_cancel", "pending_replace", "pending_review",
+            "accepted_for_bidding", "stopped", "suspended", "held",
+        }
+        self.client = self.client or self.broker.get_trading_client()
+        client = self.client
         for sym, order_row in submitted.items():
-            pos = live_by_symbol.get(sym)
-            if pos is not None:
-                qty = float(pos.get("qty") or order_row.get("qty") or 0)
-                price = float(
-                    pos.get("avg_entry_price")
-                    or order_row.get("entry_price")
-                    or order_row.get("price")
-                    or 0
-                )
-                if not dry_run:
-                    append_journal({
-                        **dict(order_row),
-                        "timestamp_utc": self._now().isoformat(),
-                        "action": "entry", "status": "filled",
-                        "qty": qty, "price": round(price, 4),
-                        "entry_price": round(price, 4),
-                    })
-                out.append({"symbol": sym, "action": "entry_filled", "qty": qty,
-                            "price": round(price, 4)})
-                continue
-            if sym in broker_pending:
-                continue
-            if dry_run:
-                out.append({"symbol": sym, "action": "would_check_order_status"})
-                continue
-            if not hasattr(self.broker, "get_order_status"):
-                raise RuntimeError(f"cannot reconcile submitted order for {sym}: status API missing")
             state = self.broker.get_order_status(
-                self.client or self.broker.get_trading_client(),
-                str(order_row.get("order_id") or ""),
+                client, str(order_row.get("order_id") or "")
             )
+            if not isinstance(state, dict):
+                raise RuntimeError(f"broker returned malformed order state for {sym}")
             status = str(state.get("status") or "").lower()
-            filled_qty = float(state.get("filled_qty") or 0)
-            filled_price = state.get("filled_avg_price")
-            if status in terminal and filled_qty <= 0:
-                action = {
-                    "canceled": "entry_cancelled", "cancelled": "entry_cancelled",
-                    "expired": "entry_expired", "rejected": "entry_rejected",
-                }[status]
+            broker_qty = float(state.get("filled_qty") or 0)
+            broker_price = state.get("filled_avg_price")
+            if broker_price is not None:
+                broker_price = float(broker_price)
+            if (
+                not status
+                or not math.isfinite(broker_qty)
+                or broker_qty < 0
+                or (
+                    broker_price is not None
+                    and (not math.isfinite(broker_price) or broker_price <= 0)
+                )
+                or (broker_qty > 0 and broker_price is None)
+            ):
+                raise RuntimeError(f"broker returned malformed order state for {sym}")
+            # Parent-order state is cumulative and authoritative. A position
+            # snapshot cannot prove how much this specific parent filled.
+            filled_qty = broker_qty
+            filled_price = float(
+                broker_price
+                or order_row.get("entry_price")
+                or order_row.get("price")
+                or 0
+            )
+            base = {
+                **dict(order_row),
+                "timestamp_utc": self._now().isoformat(),
+                "qty": filled_qty,
+                "price": round(filled_price, 4),
+                "entry_price": round(filled_price, 4),
+            }
+
+            if status == "filled":
+                if filled_qty <= 0 or filled_price <= 0:
+                    raise RuntimeError(f"filled parent order for {sym} lacks fill details")
+                append_journal({**base, "action": "entry", "status": "filled"})
+                out.append({
+                    "symbol": sym, "action": "entry_filled",
+                    "qty": filled_qty, "price": round(filled_price, 4),
+                })
+                continue
+
+            if status in active:
+                if filled_qty > 0:
+                    same_partial = (
+                        str(order_row.get("action") or "") == "entry_partial"
+                        and float(order_row.get("qty") or 0) == filled_qty
+                        and abs(float(order_row.get("entry_price") or 0) - filled_price) < 1e-9
+                    )
+                    if not same_partial:
+                        append_journal({
+                            **base, "action": "entry_partial",
+                            "status": "partially_filled",
+                        })
+                        out.append({
+                            "symbol": sym, "action": "entry_partially_filled",
+                            "qty": filled_qty, "price": round(filled_price, 4),
+                        })
+                continue
+
+            if status in terminal_actions:
+                action = terminal_actions[status]
+                if filled_qty > 0:
+                    append_journal({
+                        **base, "action": "entry", "status": "partially_filled",
+                    })
+                    out.append({
+                        "symbol": sym, "action": "entry_partial_final",
+                        "qty": filled_qty, "price": round(filled_price, 4),
+                    })
                 append_journal({
-                    **dict(order_row),
-                    "timestamp_utc": self._now().isoformat(),
-                    "action": action, "status": status,
+                    **base, "action": action, "status": status,
                     "reason": f"broker parent order {status}",
                 })
                 record_cooldown(sym)
                 out.append({"symbol": sym, "action": action})
                 continue
-            if status == "filled" or filled_qty > 0:
-                price = float(
-                    filled_price
-                    or order_row.get("entry_price")
-                    or order_row.get("price")
-                    or 0
-                )
-                append_journal({
-                    **dict(order_row),
-                    "timestamp_utc": self._now().isoformat(),
-                    "action": "entry", "status": "filled",
-                    "qty": filled_qty or float(order_row.get("qty") or 0),
-                    "price": round(price, 4), "entry_price": round(price, 4),
-                })
-                out.append({"symbol": sym, "action": "entry_filled",
-                            "qty": filled_qty, "price": round(price, 4)})
-                continue
+
             raise RuntimeError(
                 f"ambiguous broker order state for {sym}: status={status!r}, "
-                f"filled_qty={filled_qty}"
+                f"filled_qty={filled_qty}, broker_pending={sym in broker_pending}"
             )
         return out
 
@@ -329,7 +410,13 @@ class PaperTrader:
         if open_positions is not None and not open_positions.empty:
             live = set(open_positions["symbol"].astype(str).str.upper())
         out = []
-        terminal = {"canceled", "cancelled", "expired", "rejected"}
+        terminal_actions = {
+            "canceled": "exit_cancelled",
+            "cancelled": "exit_cancelled",
+            "expired": "exit_expired",
+            "done_for_day": "exit_expired",
+            "rejected": "exit_rejected",
+        }
         for sym, row in submitted.items():
             if not hasattr(self.broker, "get_order_status"):
                 raise RuntimeError(f"cannot reconcile submitted exit for {sym}: status API missing")
@@ -338,12 +425,9 @@ class PaperTrader:
                 str(row.get("order_id") or ""),
             )
             status = str(state.get("status") or "").lower()
-            if status not in terminal:
+            if status not in terminal_actions:
                 continue
-            action = {
-                "canceled": "exit_cancelled", "cancelled": "exit_cancelled",
-                "expired": "exit_expired", "rejected": "exit_rejected",
-            }[status]
+            action = terminal_actions[status]
             append_journal({
                 **dict(row), "timestamp_utc": self._now().isoformat(),
                 "action": action, "status": status,
@@ -366,15 +450,23 @@ class PaperTrader:
         if open_positions is not None and not open_positions.empty:
             live = set(open_positions["symbol"].astype(str).str.upper())
         out = []
-        now = self._now()
         for sym, entry in journaled.items():
             if sym in live:
                 continue
             fill = None
-            if not dry_run and hasattr(self.broker, "last_closed_fill"):
+            entry_time = pd.to_datetime(
+                entry.get("timestamp_utc"), utc=True, errors="coerce"
+            )
+            if (
+                not dry_run
+                and pd.notna(entry_time)
+                and hasattr(self.broker, "last_closed_fill")
+            ):
                 try:
                     self.client = self.client or self.broker.get_trading_client()
-                    fill = self.broker.last_closed_fill(self.client, sym)
+                    fill = self.broker.last_closed_fill(
+                        self.client, sym, after_utc=entry_time,
+                    )
                 except Exception:
                     fill = None
             try:
@@ -383,7 +475,11 @@ class PaperTrader:
                 stop = float(entry.get("stop_price") or 0)
             except (TypeError, ValueError):
                 continue
-            if fill:
+            fill_time = (
+                pd.to_datetime(fill.get("filled_at"), utc=True, errors="coerce")
+                if fill else pd.NaT
+            )
+            if fill and pd.notna(fill_time):
                 reason = str(fill.get("reason") or "broker_closed")
                 px = float(fill.get("price") or stop or avg)
                 if fill.get("qty"):
@@ -403,11 +499,11 @@ class PaperTrader:
                             "reason": reason, "pnl": round(pnl, 2)})
                 continue
             append_journal({
-                "timestamp_utc": now.isoformat(),
+                "timestamp_utc": fill_time.isoformat(),
                 "strategy_id": entry.get("strategy_id") or "legacy_unknown",
                 "symbol": sym, "action": action, "side": "sell",
                 "qty": qty, "price": round(px, 4),
-                "status": "filled", "session": str(now.date()),
+                "status": "filled", "session": str(fill_time.date()),
                 "entry_price": round(avg, 4), "exit_price": round(px, 4),
                 "stop_price": entry.get("stop_price"),
                 "target_price": entry.get("target_price"),
@@ -419,16 +515,22 @@ class PaperTrader:
         return out
 
     # -- exits ------------------------------------------------------------
-    def _manage_exits(self, open_positions: pd.DataFrame, dry_run: bool) -> list[dict]:
+    def _manage_exits(
+        self, open_positions: pd.DataFrame, dry_run: bool,
+        pending_entries: set[str] | None = None,
+    ) -> list[dict]:
         if open_positions.empty:
             return []
         journal = load_journal()
         unresolved_exits = set(pending_exit_orders())
         out = []
-        now = self._now()
-        mins_to_close = _ny_minutes_to_close(now)
+        now = self._clock_now().to_pydatetime()
+        mins_to_close = self._clock()["minutes_to_close"]
         for _, pos in open_positions.iterrows():
             sym = str(pos["symbol"]).upper()
+            if sym in (pending_entries or set()):
+                out.append({"symbol": sym, "action": "entry_pending"})
+                continue
             if sym in unresolved_exits:
                 out.append({"symbol": sym, "action": "exit_pending"})
                 continue
@@ -490,33 +592,36 @@ class PaperTrader:
         return out
 
     def _entry_window_open(self) -> tuple[bool, str]:
-        now_et = pd.Timestamp(self._now()).tz_convert("America/New_York")
-        if now_et.weekday() >= 5:
-            return False, "weekend"
+        clock = self._clock()
+        if not clock["is_open"]:
+            return False, "broker reports market closed"
+        now_et = self._clock_now().tz_convert("America/New_York")
         minute = now_et.hour * 60 + now_et.minute
-        open_minute = 9 * 60 + 30
-        last_entry_minute = 16 * 60 - self.limits.close_before_market_close_minutes
-        if minute < open_minute:
+        if minute < 9 * 60 + 30:
             return False, "before 09:30 ET"
-        if minute >= last_entry_minute:
+        if clock["minutes_to_close"] <= self.limits.close_before_market_close_minutes:
             return False, f"inside final {self.limits.close_before_market_close_minutes}m"
         return True, ""
 
     # -- main loop ---------------------------------------------------------
     def run_once(self, candidates: list[str], dry_run: bool = False) -> dict:
         self.client = None
+        self.account_day_pnl = None
         open_positions = self.broker.get_open_positions()
         broker_open_count = len(open_positions) if open_positions is not None else 0
         if not hasattr(self.broker, "get_open_order_symbols"):
             raise RuntimeError("broker does not expose open-order state")
         broker_pending = set(self.broker.get_open_order_symbols() or [])
 
-        order_events = self._reconcile_entry_orders(
-            open_positions, broker_pending, dry_run
-        )
+        order_events = self._reconcile_entry_orders(broker_pending, dry_run)
         exit_order_events = self._reconcile_exit_orders(open_positions, dry_run)
         reconciled = self._reconcile_broker_closes(open_positions, dry_run)
-        exits = self._manage_exits(open_positions, dry_run)
+        self.clock_info = _authoritative_clock(self.broker)
+        pending = set(broker_pending)
+        pending.update(pending_journal_orders())
+        exits = self._manage_exits(
+            open_positions, dry_run, pending_entries=pending,
+        )
 
         pending = set(broker_pending)
         pending.update(pending_journal_orders())
@@ -537,6 +642,15 @@ class PaperTrader:
             )
         entries = []
         entry_window_open, window_reason = self._entry_window_open()
+        if candidates and entry_window_open:
+            if not hasattr(self.broker, "get_account_day_pnl"):
+                raise RuntimeError("broker does not expose authoritative account P&L")
+            try:
+                self.account_day_pnl = float(self.broker.get_account_day_pnl())
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise RuntimeError("broker returned invalid account P&L") from exc
+            if not math.isfinite(self.account_day_pnl):
+                raise RuntimeError("broker returned invalid account P&L")
         for sym in candidates:
             up = str(sym).upper()
             if up in pending:

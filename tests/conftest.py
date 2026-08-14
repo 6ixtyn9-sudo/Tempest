@@ -1,6 +1,5 @@
 """Shared synthetic 1-minute frame builders for tests."""
 
-import numpy as np
 import pandas as pd
 
 from tempest.features import add_session_id

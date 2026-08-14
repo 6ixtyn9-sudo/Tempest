@@ -66,7 +66,7 @@ def main() -> int:
         max_open_positions=args.max_open,
         max_notional_per_position=args.max_notional,
         max_risk_per_position=args.max_risk,
-        max_daily_realized_loss=args.max_daily_loss,
+        max_daily_loss=args.max_daily_loss,
         per_symbol_cooldown_seconds=3600,
         horizon_bars=15,
     )

@@ -37,9 +37,11 @@ def attribute(journal) -> dict:
                 rqty = float(row.get("qty") or 0)
             except (TypeError, ValueError):
                 continue
-            if action == "entry" and rqty > 0:
-                cost = (cost * qty + px * rqty) / (qty + rqty) if (qty + rqty) else px
-                qty += rqty
+            if action in ("entry", "entry_partial") and rqty > 0:
+                # Parent-order fill events are cumulative snapshots, not
+                # additional lots. Replacing avoids double-counting partials.
+                cost = px
+                qty = rqty
             elif action in ("exit", "stop_filled", "tp_filled", "broker_closed") and rqty > 0:
                 close_qty = min(rqty, qty)
                 pnl = (px - cost) * close_qty

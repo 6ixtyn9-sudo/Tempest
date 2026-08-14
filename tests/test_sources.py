@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from tempest.sources.yfinance_1m import _chunks, _clamp_start, PILOT_MAX_DAYS
+from tempest.sources.yfinance_1m import PILOT_MAX_DAYS, _chunks, _clamp_start
 
 
 def test_chunks_respect_seven_day_cap():

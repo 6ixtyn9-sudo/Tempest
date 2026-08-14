@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
-# Commit the accumulated evidence CSVs back to the repo.
-#
-# Called TWICE per run, and that is deliberate: once after the screen/backtest
-# (which writes screen_log.csv) and again after the paper trade (which writes
-# trade_journal.csv). Committing only after the capture would push the screen
-# log while the journal was still unwritten, so every paper trade would be
-# lost the moment the Actions cache expired.
-#
+# Persist bounded operational records and dated reports on main.
 # Idempotent: with nothing staged it prints and exits 0.
 set -euo pipefail
 

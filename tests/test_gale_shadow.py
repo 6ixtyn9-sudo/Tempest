@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from tempest.gale_shadow import (
-    append_screen_rows, discover_shadow_signals, load_signals, save_signals,
+    append_screen_rows,
+    discover_shadow_signals,
+    load_signals,
+    save_signals,
     settle_open_signals,
 )
 from tests.test_gale import gale_frame

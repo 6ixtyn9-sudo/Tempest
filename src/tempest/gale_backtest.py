@@ -67,7 +67,11 @@ def _simulate(signal, grp, signal_idx: int, cost: CostModel) -> TradeResult | No
     if entry_idx >= len(grp):
         return None
     entry_bar = grp.iloc[entry_idx]
-    entry = shadow_entry_price(signal, float(entry_bar["open"]))
+    limit_price = float(signal.trigger_price)
+    if float(entry_bar["low"]) > limit_price:
+        return None
+    attainable = min(float(entry_bar["open"]), limit_price)
+    entry = shadow_entry_price(signal, attainable)
     if entry is None:
         return None
     stop = signal.stop_price
@@ -123,10 +127,12 @@ def run_gale_backtest(
             "trades": [], "rejected_unavailable": 0,
         }
     trades = []
+    signal_count = 0
     rejected_unavailable = 0
     for session, raw in feat.groupby("session", sort=True):
         grp = raw.sort_values("bar_ts_utc").reset_index(drop=True)
         for signal in detect_gale_orb(grp, symbol):
+            signal_count += 1
             observation = _available_observation(
                 obs, symbol, str(session), signal.signal_ts
             )
@@ -161,7 +167,7 @@ def run_gale_backtest(
     return {
         "strategy_id": STRATEGY_ID,
         "symbol": str(symbol).upper(),
-        "n_signals": len(trades),
+        "n_signals": signal_count,
         "n_trades": len(trades),
         "summary": summary,
         "bucket_summary": bucket_summary,

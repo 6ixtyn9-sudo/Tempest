@@ -5,7 +5,7 @@ import pytest
 
 from tempest import broker, risk
 from tempest.risk import RiskLimits, append_journal, check_entry_ok, record_cooldown
-from tempest.trader import PaperTrader, _ny_minutes_to_close
+from tempest.trader import PaperTrader, _authoritative_clock
 from tests.conftest import squeeze_pullback_break_frame
 
 
@@ -18,6 +18,12 @@ class FakeBroker:
         self.positions = pd.DataFrame()
         self.pending = set()
         self.order_states = {}
+        self.clock_info = {
+            "is_open": True,
+            "timestamp_utc": pd.Timestamp("2026-08-03T13:38:00+00:00"),
+            "minutes_to_close": 300,
+        }
+        self.account_day_pnl = 0.0
         self.client_ctor_calls = 0
 
     def get_trading_client(self):
@@ -26,6 +32,12 @@ class FakeBroker:
 
     def get_open_positions(self):
         return self.positions
+
+    def get_clock_info(self):
+        return dict(self.clock_info)
+
+    def get_account_day_pnl(self):
+        return float(self.account_day_pnl)
 
     def get_open_order_symbols(self):
         return set(self.pending)
@@ -59,8 +71,12 @@ class FakeBroker:
             client_order_id=cid, id=cid, status=SimpleNamespace(value="accepted")
         )
 
-    def last_closed_fill(self, client, symbol):
-        return getattr(self, "fills", {}).get(str(symbol).upper())
+    def last_closed_fill(self, client, symbol, after_utc=None):
+        fill = getattr(self, "fills", {}).get(str(symbol).upper())
+        if not fill or after_utc is None:
+            return fill
+        filled_at = pd.to_datetime(fill.get("filled_at"), utc=True, errors="coerce")
+        return fill if pd.notna(filled_at) and filled_at > pd.Timestamp(after_utc) else None
 
 
 class FakeSource:
@@ -220,9 +236,8 @@ def test_trader_blocks_when_already_open(tmp_path, monkeypatch):
 def test_trader_exits_at_horizon(tmp_path, monkeypatch):
     monkeypatch.setattr(risk, "JOURNAL_PATH", tmp_path / "journal.csv")
     monkeypatch.setattr(risk, "COOLDOWN_PATH", tmp_path / "cooldown.json")
-    # Entry 20 minutes ago -> past the 15-bar horizon.
-    from datetime import datetime, timedelta, timezone
-    past = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    # Entry 20 broker minutes ago -> past the 15-bar horizon.
+    past = "2026-08-03T13:18:00+00:00"
     append_journal({
         "timestamp_utc": past, "symbol": "YXT",
         "action": "entry", "side": "buy", "qty": 100, "price": 10.0,
@@ -243,7 +258,10 @@ def test_trader_exits_at_horizon(tmp_path, monkeypatch):
     assert not (j["action"] == "exit").any()
 
     broker_.fills = {
-        "YXT": {"price": 10.30, "reason": "broker_closed", "qty": 100}
+        "YXT": {
+            "price": 10.30, "reason": "broker_closed", "qty": 100,
+            "filled_at": "2026-08-03T13:37:00+00:00",
+        }
     }
     result2 = trader.run_once([], dry_run=False)
     assert any(e["action"] == "broker_closed" for e in result2["exits"])
@@ -280,7 +298,11 @@ def test_trader_journals_broker_stop_when_position_vanishes(tmp_path, monkeypatc
         "target_price": 11.10,
     })
     broker_ = FakeBroker()
-    broker_.fills = {"YXT": {"price": 10.20, "reason": "stop_filled", "qty": 100}}
+    broker_.clock_info["timestamp_utc"] = pd.Timestamp("2026-08-13T14:06:00+00:00")
+    broker_.fills = {"YXT": {
+        "price": 10.20, "reason": "stop_filled", "qty": 100,
+        "filled_at": "2026-08-13T14:05:00+00:00",
+    }}
     trader = PaperTrader(broker_, source=FakeSource({}))
     result = trader.run_once([], dry_run=False)
     stops = [e for e in result["exits"] if e["action"] == "stop_filled"]
@@ -305,7 +327,12 @@ def test_trader_dry_run_places_nothing(tmp_path, monkeypatch):
     assert broker_.client_ctor_calls == 0
 
 
-def test_ny_minutes_to_close_sane():
-    m = _ny_minutes_to_close(pd.Timestamp("2026-08-13 15:00:00+00:00").to_pydatetime())
-    # 15:00 UTC = 11:00 ET -> 5h to close = 300 min
-    assert m == 300
+def test_authoritative_clock_is_required():
+    fake = FakeBroker()
+    assert _authoritative_clock(fake)["minutes_to_close"] == 300
+
+    class NoClock:
+        pass
+
+    with pytest.raises(RuntimeError, match="authoritative market clock"):
+        _authoritative_clock(NoClock())

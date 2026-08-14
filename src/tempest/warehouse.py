@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from tempest.config import WAREHOUSE_DIR, SYMBOL_PATTERN
+from tempest.config import SYMBOL_PATTERN, WAREHOUSE_DIR
 
 CANONICAL_COLUMNS = [
     "symbol", "bar_ts_utc", "open", "high", "low", "close", "volume",

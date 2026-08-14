@@ -3,7 +3,7 @@
 import json
 
 from tempest.sources import tradingview
-from tempest.sources.tradingview import build_filter, screen, _payload
+from tempest.sources.tradingview import _payload, build_filter, screen
 
 _FIXTURE = {
     "totalCount": 2,

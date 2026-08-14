@@ -8,11 +8,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from tempest.gale_shadow import (  # noqa: E402
-    append_screen_rows, append_status, discover_shadow_signals, load_signals,
-    save_signals, settle_open_signals,
+    append_screen_rows,
+    append_status,
+    discover_shadow_signals,
+    load_signals,
+    save_signals,
+    settle_open_signals,
 )
-from tempest.sources.alpaca import AlpacaSource  # noqa: E402
 from tempest.sources import tradingview  # noqa: E402
+from tempest.sources.alpaca import AlpacaSource  # noqa: E402
 from tempest.strategy import REL_VOL_TRADE_MAX  # noqa: E402
 
 

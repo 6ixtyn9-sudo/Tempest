@@ -74,6 +74,7 @@ def test_backtest_simulates_same_day_only():
     """The backtest must simulate only intraday bars after the entry bar
     (same-day capture) — never next-day/prior-day bars."""
     import pandas as pd
+
     from tempest.backtest import run_backtest
     from tests.conftest import squeeze_pullback_break_frame
 
@@ -86,3 +87,24 @@ def test_backtest_simulates_same_day_only():
     rep = run_backtest(out, "YXT", relax=True)
     # Entry + simulation stays within the session (no cross-session trades).
     assert all(t["held_bars"] >= 0 for t in rep["trades"])
+
+
+def test_backtest_does_not_assume_a_fill_inside_signal_candle():
+    import pandas as pd
+
+    from tempest.backtest import _simulate
+    from tempest.strategy import PullbackSignal
+
+    ts = pd.Timestamp("2026-08-03T13:37:00+00:00")
+    bars = pd.DataFrame([
+        {"bar_ts_utc": ts, "open": 10.0, "high": 10.4, "low": 9.9, "close": 10.2},
+        {"bar_ts_utc": ts + pd.Timedelta(minutes=1), "open": 10.5,
+         "high": 10.8, "low": 10.3, "close": 10.7},
+    ])
+    signal = PullbackSignal(
+        symbol="YXT", session=ts.date(), entry_ts=ts, entry_price=10.1,
+        stop_price=9.8, target_price=10.7, squeeze_high=10.1,
+        pullback_low=9.8,
+    )
+
+    assert _simulate(signal, bars, CostModel(), 15, {}) is None

@@ -4,7 +4,9 @@ import pandas as pd
 
 from tempest.features import compute_features
 from tempest.strategy import (
-    detect_first_pullback, screen_pillars, PullbackSignal,
+    PullbackSignal,
+    detect_first_pullback,
+    screen_pillars,
 )
 from tests.conftest import squeeze_pullback_break_frame
 
