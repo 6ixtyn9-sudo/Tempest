@@ -44,8 +44,10 @@ def paper_steps():
 def test_paper_steps_exist():
     steps = paper_steps()
     assert steps, "no paper-trading steps found - did the workflows move?"
-    assert len(steps) >= 3, (
-        f"expected >=3 paper steps (capture, poll, gale), found {len(steps)}"
+    # Was 3 (capture, poll, gale). Gale paper execution retired 2026-08-14
+    # on measured evidence, leaving Tempest's capture and poll steps.
+    assert len(steps) >= 2, (
+        f"expected >=2 paper steps (capture, poll), found {len(steps)}"
     )
 
 

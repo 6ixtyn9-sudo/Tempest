@@ -76,16 +76,14 @@ class TestWorkflowWiring:
             )
             assert float(str(env[RR_VAR]).strip('"')) == PROBE_RR
 
-    def test_gale_is_left_at_the_default(self):
-        """Gale's best excursion was 1.34R; a 3R target is unreachable."""
-        gale = [(wf, name, env) for wf, name, run, env in paper_steps()
+    def test_gale_execution_is_retired(self):
+        """Gale was retired on measured evidence (n=62, zero gross edge)."""
+        gale = [(wf, name) for wf, name, run, _env in paper_steps()
                 if "gale_paper_trade.py" in run]
-        assert gale, "no Gale paper step found"
-        for wf, name, env in gale:
-            assert RR_VAR not in env, (
-                f"{wf} step {name!r} sets {RR_VAR}. Gale never reaches even "
-                "1.5R, so raising its target only widens the loss."
-            )
+        assert not gale, (
+            f"Gale paper execution reintroduced in {gale}. Re-adding it "
+            "needs a new properly-powered result, not a config change."
+        )
 
     def test_risk_floor_still_set_everywhere(self):
         """The RR probe must not have displaced the risk-floor probe."""
