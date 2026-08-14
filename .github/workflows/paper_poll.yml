@@ -86,9 +86,23 @@ jobs:
           fi
           exit 0
 
-      - name: Commit paper-trade evidence
+      - name: Run Gale ORB5 shadow
         if: steps.window.outputs.run == 'true'
-        run: bash scripts/commit_evidence.sh "paper poll"
+        continue-on-error: true
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          TEMPEST_PAPER: "1"
+        run: |
+          if [ -z "${ALPACA_API_KEY}" ] || [ -z "${ALPACA_SECRET_KEY}" ]; then
+            echo "Alpaca secrets not set - skipping Gale shadow."
+            exit 0
+          fi
+          PYTHONPATH=src python3 scripts/gale_shadow.py
+
+      - name: Commit paper-trade and Gale evidence
+        if: steps.window.outputs.run == 'true'
+        run: bash scripts/commit_evidence.sh "paper poll + Gale shadow"
 
       - name: Save localdata cache
         if: steps.window.outputs.run == 'true'

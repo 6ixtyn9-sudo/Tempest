@@ -32,8 +32,11 @@ evidence_files=(
     localdata/screen_log.csv
     localdata/trade_journal.csv
     localdata/paper_status.csv
+    localdata/gale_screen_log.csv
+    localdata/gale_shadow_signals.csv
+    localdata/gale_status.csv
 )
-for report in localdata/backtest_report_*.json; do
+for report in localdata/backtest_report_*.json localdata/gale_backtest_report_*.json; do
     [ -f "$report" ] && evidence_files+=("$report")
 done
 for evidence in "${evidence_files[@]}"; do

@@ -141,8 +141,9 @@ def test_check_entry_ok_blocks_halt(tmp_path, monkeypatch):
 
 def test_check_entry_ok_blocks_daily_loss(tmp_path, monkeypatch):
     monkeypatch.setattr(risk, "JOURNAL_PATH", tmp_path / "journal.csv")
+    from datetime import datetime, timezone
     append_journal({
-        "timestamp_utc": "2026-08-13T15:00:00+00:00", "symbol": "BOXL",
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(), "symbol": "BOXL",
         "action": "exit", "qty": 100, "price": 10.0, "pnl": -300.0,
     })
     ok, reasons = check_entry_ok("YXT", 100, 10.0, RiskLimits(), pd.DataFrame())

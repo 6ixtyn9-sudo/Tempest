@@ -23,13 +23,18 @@ def load_float_map(path=None) -> dict:
         df = pd.read_csv(p)
     except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
         return {}
-    required = {"date_utc", "symbol", "float_shares"}
+    required = {
+        "captured_at_utc", "session_date", "symbol", "float_shares",
+    }
     if df.empty or not required.issubset(df.columns):
         return {}
+    captured = pd.to_datetime(df["captured_at_utc"], utc=True, errors="coerce")
+    quality = df.get("snapshot_quality", "timestamped")
+    valid = captured.notna() & pd.Series(quality, index=df.index).astype(str).eq("timestamped")
     out = {}
-    for _, row in df.iterrows():
+    for _, row in df[valid].iterrows():
         try:
-            day = pd.Timestamp(row["date_utc"]).date().isoformat()
+            day = pd.Timestamp(row["session_date"]).date().isoformat()
             out[(str(row["symbol"]).upper(), day)] = float(row["float_shares"])
         except (TypeError, ValueError):
             continue

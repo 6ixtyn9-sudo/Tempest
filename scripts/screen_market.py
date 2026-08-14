@@ -15,6 +15,7 @@ import argparse
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -26,18 +27,29 @@ from tempest.sources.tradingview import build_filter, screen  # noqa: E402
 from tempest.strategy import screen_pillars  # noqa: E402
 
 SCREEN_LOG_PATH = DATA_DIR / "screen_log.csv"
+SCREEN_COLUMNS = [
+    "captured_at_utc", "session_date", "snapshot_quality", "date_utc",
+    "symbol", "close", "gap_pct", "relvol", "float_shares", "volume", "passes",
+]
 
 
 def _load_log() -> pd.DataFrame:
     if not SCREEN_LOG_PATH.exists():
-        return pd.DataFrame(columns=[
-            "date_utc", "symbol", "close", "gap_pct", "relvol",
-            "float_shares", "volume", "passes",
-        ])
+        return pd.DataFrame(columns=SCREEN_COLUMNS)
     try:
-        return pd.read_csv(SCREEN_LOG_PATH)
+        log = pd.read_csv(SCREEN_LOG_PATH)
     except (pd.errors.EmptyDataError, pd.errors.ParserError):
-        return pd.DataFrame()
+        return pd.DataFrame(columns=SCREEN_COLUMNS)
+    if "captured_at_utc" not in log.columns:
+        log["captured_at_utc"] = ""
+    if "session_date" not in log.columns:
+        log["session_date"] = log.get("date_utc", "")
+    if "snapshot_quality" not in log.columns:
+        log["snapshot_quality"] = "legacy_unknown"
+    for col in SCREEN_COLUMNS:
+        if col not in log.columns:
+            log[col] = None
+    return log[SCREEN_COLUMNS]
 
 
 def main() -> int:
@@ -60,6 +72,7 @@ def main() -> int:
         return 0
 
     now = datetime.now(timezone.utc)
+    session_date = now.astimezone(ZoneInfo("America/New_York")).date().isoformat()
     log = _load_log()
     passes = []
     for r in rows:
@@ -72,6 +85,9 @@ def main() -> int:
             float_shares=r["float_shares"],
         )
         log = pd.concat([log, pd.DataFrame([{
+            "captured_at_utc": now.isoformat(),
+            "session_date": session_date,
+            "snapshot_quality": "timestamped",
             "date_utc": now.date().isoformat(),
             "symbol": r["symbol"], "close": r["close"], "gap_pct": r["gap_pct"],
             "relvol": r["relvol"], "float_shares": r["float_shares"],
@@ -84,7 +100,9 @@ def main() -> int:
               f"relvol={r['relvol']:>6.1f} float={r['float_shares']:>12,.0f} "
               f"vol={r['volume']:>12,.0f}")
 
-    log = log.drop_duplicates(subset=["date_utc", "symbol"], keep="last")
+    log = log.sort_values(
+        ["captured_at_utc", "session_date", "symbol"], na_position="first"
+    )
     SCREEN_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     log.to_csv(SCREEN_LOG_PATH, index=False)
     print(f"\n{len(passes)} qualifier(s) today; log at {SCREEN_LOG_PATH} "

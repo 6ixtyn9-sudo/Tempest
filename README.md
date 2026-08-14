@@ -95,6 +95,33 @@ PYTHONPATH=src python3 scripts/paper_trade.py              # place on paper
 PYTHONPATH=src python3 scripts/attribute_pnl.py            # realized P&L
 ```
 
+## Gale ORB5 shadow lane
+
+Gale is a second, isolated hypothesis in the same repository: a confirmed
+five-minute opening-range breakout on the same timestamped mover universe.
+It is **shadow-only** and has no broker import or order path.
+
+Fixed rules:
+- complete 09:30-09:34 ET opening range; entries 09:35-11:00 ET
+- completed 1m close above the range high and above VWAP
+- breakout volume >= 1.5x the prior five-bar median
+- maximum 0.5% chase and maximum 5% opening-range width
+- range-low stop, 2R target, 15-bar horizon
+
+The paper poll runs Gale after Tempest with `continue-on-error: true`, so shadow
+research cannot interrupt Tempest execution. Evidence is separate:
+
+```
+localdata/gale_screen_log.csv
+localdata/gale_shadow_signals.csv
+localdata/gale_status.csv
+localdata/gale_backtest_report_YYYY-MM-DD.json
+```
+
+Every Gale row carries `strategy_id=gale_orb5`. Timestamped screen evidence
+must exist before a signal; legacy daily rows without `captured_at_utc` are
+excluded from intraday validation.
+
 ## Automated daily capture (GitHub Actions)
 
 Two workflows, both `workflow_dispatch` only — there is no GitHub `schedule:`
@@ -143,6 +170,9 @@ src/tempest/
   warehouse.py     # parquet warehouse, dedup, keep-last
   features.py      # gap_open, relvol, 9EMA, VWAP, day-session labels
   strategy.py      # 5 pillars + first-pullback detector (mechanical)
+  gale.py          # fixed ORB5 shadow strategy
+  gale_shadow.py   # timestamped shadow discovery + settlement
+  gale_backtest.py # point-in-time ORB5 backtest
   validation.py    # cost adjustment, chronological split, walk-forward
   backtest.py      # event simulation + per-bucket aggregation
   sources/
@@ -157,8 +187,10 @@ scripts/
   build_warehouse.py
   run_backtest.py
   screen_market.py    # run the pillars screen, log qualifiers, fetch bars
-  paper_trade.py      # one paper-trading pass
-  capture_daily.sh    # screen + backtest + commit evidence
+  paper_trade.py      # one Tempest paper-trading pass
+  gale_shadow.py      # one Gale shadow-only pass
+  run_gale_backtest.py # durable Gale report
+  capture_daily.sh    # screen + both backtests + commit evidence
   commit_evidence.sh  # per-file `git add -f`, pull-rebase-push with retry
   attribute_pnl.py    # realized P&L from the journal
 .github/workflows/
